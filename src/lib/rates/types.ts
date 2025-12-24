@@ -73,6 +73,16 @@ export const DEFAULT_FILTER_STATE: RatesFilterState = {
   p11dRange: { min: null, max: null },
 };
 
+// Score breakdown for composite scoring
+export interface ScoreBreakdown {
+  valueScore: number;
+  efficiencyBonus: number;
+  affordabilityMod: number;
+  brandBonus: number;
+  costRatio: number;
+  totalPayments: number;
+}
+
 // API response rate type
 export interface BrowseRate {
   id: string;
@@ -101,6 +111,7 @@ export interface BrowseRate {
   // Value scoring
   valueScore: number;
   valueLabel: string;
+  scoreBreakdown: ScoreBreakdown | null;
   costRatio: number | null;
 }
 

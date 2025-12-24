@@ -195,19 +195,14 @@ export function createRateExplorerColumns(options: ColumnOptions = {}): ColumnDe
       enableSorting: true,
     }),
 
-    // Score with tooltip showing calculation
+    // Score with tooltip showing breakdown
     columnHelper.accessor("bestScore", {
       id: "score",
       header: "Score",
       cell: ({ getValue, row }) => {
         const score = getValue();
-        const p11d = row.original.p11dGbp;
+        const breakdown = row.original.scoreBreakdown;
         const monthlyRental = row.original.bestFunder.priceGbp;
-        const term = 36; // Default comparison term
-
-        // Calculate cost ratio for display
-        const totalCost = monthlyRental * term;
-        const costRatio = p11d > 0 ? ((totalCost / p11d) * 100).toFixed(1) : null;
 
         // Get value label
         const getValueLabel = (s: number) => {
@@ -225,6 +220,21 @@ export function createRateExplorerColumns(options: ColumnOptions = {}): ColumnDe
           if (s >= 40) return { bg: "rgba(250, 204, 21, 0.2)", border: "rgba(250, 204, 21, 0.4)", text: "#facc15" };
           return { bg: "rgba(100, 116, 139, 0.2)", border: "rgba(100, 116, 139, 0.4)", text: "#64748b" };
         };
+
+        // Format bonus/modifier with sign
+        const formatModifier = (val: number) => {
+          if (val > 0) return `+${val}`;
+          if (val < 0) return `${val}`;
+          return "0";
+        };
+
+        // Get color for bonus/modifier
+        const getModifierColor = (val: number) => {
+          if (val > 0) return "#34d399"; // green
+          if (val < 0) return "#f87171"; // red
+          return "#64748b"; // gray
+        };
+
         const style = getScoreStyle(score);
         const valueLabel = getValueLabel(score);
 
@@ -256,42 +266,74 @@ export function createRateExplorerColumns(options: ColumnOptions = {}): ColumnDe
                 }}
               />
               <div
-                className="px-3 py-2 rounded-lg text-[10px] whitespace-nowrap shadow-xl"
+                className="px-3 py-2.5 rounded-lg text-[10px] whitespace-nowrap shadow-xl"
                 style={{
                   background: "rgba(15, 20, 25, 0.98)",
                   border: "1px solid rgba(255, 255, 255, 0.15)",
                   boxShadow: "0 10px 40px rgba(0, 0, 0, 0.5)",
                 }}
               >
-                <div className="font-semibold text-white mb-1.5" style={{ color: style.text }}>
+                <div className="font-semibold text-white mb-2" style={{ color: style.text }}>
                   {valueLabel} Value
                 </div>
-                <div className="space-y-1 text-white/70">
-                  <div className="flex justify-between gap-4">
-                    <span>Monthly:</span>
-                    <span className="text-white">£{monthlyRental}</span>
-                  </div>
-                  <div className="flex justify-between gap-4">
-                    <span>P11D:</span>
-                    <span className="text-white">£{p11d.toLocaleString()}</span>
-                  </div>
-                  <div className="flex justify-between gap-4">
-                    <span>Term:</span>
-                    <span className="text-white">{term} months</span>
-                  </div>
-                  <div className="border-t border-white/10 pt-1 mt-1">
-                    <div className="flex justify-between gap-4">
-                      <span>Total Cost:</span>
-                      <span className="text-white">£{totalCost.toLocaleString()}</span>
+                {breakdown ? (
+                  <div className="space-y-1.5">
+                    {/* Score Components */}
+                    <div className="text-white/50 text-[9px] uppercase tracking-wide mb-1">
+                      Score Components
                     </div>
-                    {costRatio && (
-                      <div className="flex justify-between gap-4">
-                        <span>Cost/P11D:</span>
-                        <span className="text-white">{costRatio}%</span>
+                    <div className="flex justify-between gap-6 text-white/70">
+                      <span>Value Score:</span>
+                      <span className="text-cyan-400 font-medium">{breakdown.valueScore}</span>
+                    </div>
+                    <div className="flex justify-between gap-6 text-white/70">
+                      <span>Efficiency Bonus:</span>
+                      <span style={{ color: getModifierColor(breakdown.efficiencyBonus) }}>
+                        {formatModifier(breakdown.efficiencyBonus)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between gap-6 text-white/70">
+                      <span>Affordability:</span>
+                      <span style={{ color: getModifierColor(breakdown.affordabilityMod) }}>
+                        {formatModifier(breakdown.affordabilityMod)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between gap-6 text-white/70">
+                      <span>Brand Bonus:</span>
+                      <span style={{ color: getModifierColor(breakdown.brandBonus) }}>
+                        {formatModifier(breakdown.brandBonus)}
+                      </span>
+                    </div>
+                    {/* Divider */}
+                    <div className="border-t border-white/10 pt-1.5 mt-1.5">
+                      <div className="flex justify-between gap-6 font-semibold">
+                        <span className="text-white/70">Final Score:</span>
+                        <span style={{ color: style.text }}>{score}</span>
                       </div>
-                    )}
+                    </div>
+                    {/* Cost Ratio */}
+                    <div className="border-t border-white/10 pt-1.5 mt-1.5">
+                      <div className="flex justify-between gap-6 text-white/50 text-[9px]">
+                        <span>Cost Ratio:</span>
+                        <span>{(breakdown.costRatio * 100).toFixed(1)}%</span>
+                      </div>
+                      <div className="flex justify-between gap-6 text-white/50 text-[9px]">
+                        <span>Payments:</span>
+                        <span>{breakdown.totalPayments} × £{monthlyRental}</span>
+                      </div>
+                    </div>
                   </div>
-                </div>
+                ) : (
+                  <div className="space-y-1 text-white/70">
+                    <div className="flex justify-between gap-4">
+                      <span>Monthly:</span>
+                      <span className="text-white">£{monthlyRental}</span>
+                    </div>
+                    <div className="text-white/40 text-[9px] mt-2">
+                      Score breakdown not available
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
             {/* CSS for hover - scoped to this element only */}

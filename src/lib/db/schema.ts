@@ -741,11 +741,27 @@ export const providerRates = pgTable("provider_rates", {
   // Raw data backup
   rawData: jsonb("raw_data").$type<Record<string, unknown>>(),
 
+  // Pricing - basic list price (ex-options, ex-VAT)
+  basicListPrice: integer("basic_list_price"), // in pence
+
   // Deal value score (0-100, calculated from cost ratio)
   score: integer("score"),
 
+  // Score breakdown for analytics
+  scoreBreakdown: jsonb("score_breakdown").$type<ScoreBreakdown>(),
+
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
+
+// Score breakdown type for analytics
+export type ScoreBreakdown = {
+  valueScore: number;
+  efficiencyBonus: number;
+  affordabilityMod: number;
+  brandBonus: number;
+  costRatio: number;
+  totalPayments: number;
+};
 
 // Salary Sacrifice rates - separate table for BSSNL contract type
 // Includes BIK-specific fields and employer/employee cost breakdowns
@@ -909,7 +925,9 @@ export type ProviderRate = {
   euroRating: string | null;
   rdeCertificationLevel: string | null;
   rawData: Record<string, unknown> | null;
+  basicListPrice: number | null;
   score: number | null;
+  scoreBreakdown: ScoreBreakdown | null;
   createdAt: Date;
 };
 

@@ -1,5 +1,14 @@
 "use client";
 
+export interface ScoreBreakdown {
+  valueScore: number;
+  efficiencyBonus: number;
+  affordabilityMod: number;
+  brandBonus: number;
+  costRatio: number;
+  totalPayments: number;
+}
+
 export interface VehicleTableRow {
   id: string;
   capCode: string;
@@ -18,6 +27,7 @@ export interface VehicleTableRow {
   latestRateDate: string | null;
   integrityDays: number;
   bestScore: number;
+  scoreBreakdown: ScoreBreakdown | null;
   isSpecialOffer: boolean;
   isEnabled: boolean;
   logoUrl: string;

@@ -41,13 +41,13 @@ export function selectTopRatesByScore(
   }
 
   const grouped = new Map<string, RateCandidate[]>();
-  for (const rate of bestByCap.values()) {
+  for (const rate of Array.from(bestByCap.values())) {
     const key = `${rate.manufacturer.toLowerCase()}|${rate.model.toLowerCase()}`;
     if (!grouped.has(key)) grouped.set(key, []);
     grouped.get(key)!.push(rate);
   }
 
-  for (const [key, group] of grouped.entries()) {
+  for (const [key, group] of Array.from(grouped.entries())) {
     const sorted = [...group].sort((a, b) => {
       const scoreDiff = scoreValue(b.score) - scoreValue(a.score);
       if (scoreDiff !== 0) return scoreDiff;

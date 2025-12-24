@@ -89,9 +89,12 @@ export async function GET(request: NextRequest) {
         paymentPlan: providerRates.paymentPlan,
         totalRental: providerRates.totalRental,
         p11d: providerRates.p11d,
+        basicListPrice: providerRates.basicListPrice,
         fuelType: providerRates.fuelType,
         co2Gkm: providerRates.co2Gkm,
         bodyStyle: providerRates.bodyStyle,
+        wltpEvRange: providerRates.wltpEvRange,
+        fuelEcoCombined: providerRates.fuelEcoCombined,
       })
       .from(providerRates)
       .innerJoin(
@@ -111,8 +114,14 @@ export async function GET(request: NextRequest) {
       const scores = calculateMultiTermScores([{
         term: rate.term,
         monthlyRentalPence: rate.totalRental,
+        paymentPlan: rate.paymentPlan,
+        basicListPricePence: rate.basicListPrice,
         p11dPence: rate.p11d,
         contractType: rate.contractType,
+        manufacturer: rate.manufacturer,
+        fuelType: rate.fuelType,
+        evRangeMiles: rate.wltpEvRange,
+        fuelEcoMpg: rate.fuelEcoCombined ? parseFloat(rate.fuelEcoCombined) : null,
       }]);
 
       return {

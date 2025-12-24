@@ -304,7 +304,7 @@ export async function countOurRatesByMakeModel(
   }
 
   return new Map(
-    [...counts.entries()].map(([key, count]) => [
+    Array.from(counts.entries()).map(([key, count]) => [
       key,
       { count, minPrice: minPriceByMake.get(key) ?? 0, maxScore: maxScoreByMake.get(key) ?? 0 },
     ])

@@ -5,6 +5,7 @@ import { providerRates } from "@/lib/db/schema";
 import { eq, and, gte, lte, ilike, sql, desc, asc, inArray } from "drizzle-orm";
 import { getContractTypesForFilters, VAN_BODY_TYPES } from "@/lib/rates/types";
 import type { ContractTab, VehicleCategory } from "@/lib/rates/types";
+import { getScoreLabel } from "@/lib/rates/scoring";
 
 /**
  * GET /api/admin/rates
@@ -215,6 +216,7 @@ export async function GET(req: NextRequest) {
         bikTaxLowerRate: providerRates.bikTaxLowerRate,
         bikTaxHigherRate: providerRates.bikTaxHigherRate,
         score: providerRates.score,
+        scoreBreakdown: providerRates.scoreBreakdown,
       })
       .from(providerRates)
       .where(and(...conditions))
@@ -230,23 +232,8 @@ export async function GET(req: NextRequest) {
 
     const total = Number(countResult?.count || 0);
 
-    // Helper to get score label
-    const getScoreLabel = (score: number | null): string => {
-      if (score === null) return "Unknown";
-      if (score >= 80) return "Exceptional";
-      if (score >= 65) return "Great";
-      if (score >= 50) return "Good";
-      if (score >= 40) return "Fair";
-      return "Poor";
-    };
-
     // Transform response using stored scores
     const transformedRates = rates.map((r) => {
-      // Calculate cost ratio for display (optional)
-      const costRatio = r.p11d && r.p11d > 0 && r.term > 0
-        ? (r.totalRental * r.term) / r.p11d
-        : null;
-
       return {
         id: r.id,
         capCode: r.capCode,
@@ -271,10 +258,11 @@ export async function GET(req: NextRequest) {
         excessMileagePence: r.excessMileagePpm,
         bikTaxLowerRateGbp: r.bikTaxLowerRate ? r.bikTaxLowerRate / 100 : null,
         bikTaxHigherRateGbp: r.bikTaxHigherRate ? r.bikTaxHigherRate / 100 : null,
-        // Value scoring - now from stored score
+        // Value scoring - from stored score and breakdown
         valueScore: r.score ?? 50,
-        valueLabel: getScoreLabel(r.score),
-        costRatio,
+        valueLabel: getScoreLabel(r.score ?? 50),
+        scoreBreakdown: r.scoreBreakdown,
+        costRatio: r.scoreBreakdown?.costRatio ?? null,
       };
     });
 

@@ -92,16 +92,18 @@ export async function GET(req: NextRequest) {
       distribution[row.tier] = Number(row.count);
     }
 
-    // Get sample vehicles with best scores
+    // Get sample vehicles with best scores and breakdowns
     const sampleVehicles = await db
       .select({
         capCode: providerRates.capCode,
         manufacturer: providerRates.manufacturer,
         model: providerRates.model,
         variant: providerRates.variant,
+        fuelType: providerRates.fuelType,
         totalRental: providerRates.totalRental,
         p11d: providerRates.p11d,
         score: providerRates.score,
+        scoreBreakdown: providerRates.scoreBreakdown,
       })
       .from(providerRates)
       .innerJoin(ratebookImports, eq(providerRates.importId, ratebookImports.id))
@@ -121,12 +123,14 @@ export async function GET(req: NextRequest) {
       manufacturer: v.manufacturer,
       model: v.model,
       variant: v.variant,
+      fuelType: v.fuelType,
       displayName: v.variant
         ? `${v.manufacturer} ${v.model} ${v.variant}`
         : `${v.manufacturer} ${v.model}`,
       monthlyPriceGbp: v.totalRental ? Math.round(v.totalRental / 100) : null,
       p11dGbp: v.p11d ? Math.round(v.p11d / 100) : null,
       score: v.score,
+      scoreBreakdown: v.scoreBreakdown,
     }));
 
     return NextResponse.json({

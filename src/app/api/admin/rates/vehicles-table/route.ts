@@ -104,6 +104,17 @@ export async function GET(request: NextRequest) {
           ORDER BY pr2.total_rental ASC
           LIMIT 1
         )`.as("bestProviderCode"),
+        // Get score breakdown from the rate with the best score
+        bestScoreBreakdown: sql<string>`(
+          SELECT pr2.score_breakdown::text
+          FROM provider_rates pr2
+          INNER JOIN ratebook_imports ri2 ON pr2.import_id = ri2.id
+          WHERE pr2.vehicle_id = ${providerRates.vehicleId}
+          AND ri2.is_latest = true
+          AND pr2.score IS NOT NULL
+          ORDER BY pr2.score DESC
+          LIMIT 1
+        )`.as("bestScoreBreakdown"),
         providerCount: sql<number>`COUNT(DISTINCT ${providerRates.providerCode})`.as("providerCount"),
         providers: sql<string>`STRING_AGG(DISTINCT ${providerRates.providerCode}, ',')`.as("providers"),
         latestRatebookDate: sql<Date>`MAX(COALESCE(${ratebookImports.ratebookDate}, ${ratebookImports.createdAt}))`.as("latestRatebookDate"),
@@ -163,6 +174,16 @@ export async function GET(request: NextRequest) {
         const logoSlug = v.manufacturer.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
         const logoUrl = `/logos/thumb/${logoSlug}.png`;
 
+        // Parse score breakdown if available
+        let scoreBreakdown = null;
+        if (v.bestScoreBreakdown) {
+          try {
+            scoreBreakdown = JSON.parse(v.bestScoreBreakdown);
+          } catch {
+            // Ignore parse errors
+          }
+        }
+
         return {
           id: v.vehicleId,
           capCode: v.capCode,
@@ -185,6 +206,7 @@ export async function GET(request: NextRequest) {
             : null,
           integrityDays,
           bestScore: score,
+          scoreBreakdown,
           isSpecialOffer: status.isSpecialOffer,
           isEnabled: status.isEnabled,
           logoUrl,
