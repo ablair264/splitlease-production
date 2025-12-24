@@ -3,7 +3,6 @@
 import { useState, useEffect } from "react";
 import { Play, CheckCircle, Filter, Loader2 } from "lucide-react";
 import { ExportProgressModal } from "./export-progress-modal";
-import { apiFetch } from "@/lib/utils";
 
 type ExportConfig = {
   contractTerm: number;
@@ -55,7 +54,8 @@ export function OgilvieExportForm({ sessionValid, onExportComplete }: ExportForm
   const loadManufacturers = async () => {
     setLoadingManufacturers(true);
     try {
-      const response = await apiFetch("/api/ogilvie/manufacturers");
+      // Use internal proxy route instead of direct Railway call
+      const response = await fetch("/api/admin/ogilvie?action=manufacturers");
       const data = await response.json();
       if (data.manufacturers) {
         setManufacturers(data.manufacturers);

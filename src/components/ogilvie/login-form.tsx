@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { Loader2, LogIn, CheckCircle, XCircle, LogOut } from "lucide-react";
-import { apiFetch } from "@/lib/utils";
 
 type LoginFormProps = {
   onLoginSuccess?: () => void;
@@ -33,10 +32,11 @@ export function OgilvieLoginForm({ onLoginSuccess, sessionStatus, onRefreshStatu
     setError(null);
 
     try {
-      const response = await apiFetch("/api/ogilvie/login", {
+      // Use internal proxy route instead of direct Railway call
+      const response = await fetch("/api/admin/ogilvie", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: loginEmail, password: loginPassword }),
+        body: JSON.stringify({ action: "login", email: loginEmail, password: loginPassword }),
       });
 
       const data = await response.json();

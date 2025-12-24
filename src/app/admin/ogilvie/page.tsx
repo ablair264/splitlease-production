@@ -5,7 +5,6 @@ import { OgilvieLoginForm } from "@/components/ogilvie/login-form";
 import { OgilvieExportForm } from "@/components/ogilvie/export-form";
 import { OgilvieExportsTable } from "@/components/ogilvie/exports-table";
 import { Download, History, LogIn } from "lucide-react";
-import { apiFetch } from "@/lib/utils";
 
 type Tab = "export" | "history";
 
@@ -24,7 +23,8 @@ export default function OgilviePage() {
   const checkSessionStatus = useCallback(async () => {
     setCheckingSession(true);
     try {
-      const response = await apiFetch("/api/ogilvie/validate");
+      // Use internal proxy route instead of direct Railway call
+      const response = await fetch("/api/admin/ogilvie?action=validate");
       const data = await response.json();
       setSessionStatus({
         valid: data.valid,

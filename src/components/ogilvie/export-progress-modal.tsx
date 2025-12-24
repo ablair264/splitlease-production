@@ -38,9 +38,9 @@ export function ExportProgressModal({ isOpen, onClose, configs, onComplete }: Ex
     setStartTime(Date.now());
     setElapsed(0);
 
-    // Start the export with SSE
+    // Start the export with SSE (using internal proxy route for auth)
     const eventSource = new EventSource(
-      `/api/ogilvie/export/stream?configs=${encodeURIComponent(JSON.stringify(configs))}`
+      `/api/admin/ogilvie/stream?configs=${encodeURIComponent(JSON.stringify(configs))}`
     );
 
     eventSource.onmessage = (event) => {
@@ -250,7 +250,7 @@ export function ExportProgressModal({ isOpen, onClose, configs, onComplete }: Ex
                   </div>
                   {r.success && r.batchId && (
                     <a
-                      href={`/api/ogilvie/exports/${r.batchId}?download=true`}
+                      href={`/api/admin/ogilvie/download/${r.batchId}`}
                       className="flex items-center gap-1 text-xs text-[#79d5e9] hover:underline"
                     >
                       <Download className="h-3 w-3" />
