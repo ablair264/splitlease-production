@@ -204,21 +204,24 @@ export function createRateExplorerColumns(options: ColumnOptions = {}): ColumnDe
         const breakdown = row.original.scoreBreakdown;
         const monthlyRental = row.original.bestFunder.priceGbp;
 
-        // Get value label
+        // Get value label - aligned with scoring.ts thresholds
         const getValueLabel = (s: number) => {
-          if (s >= 80) return "Exceptional";
-          if (s >= 65) return "Great";
-          if (s >= 50) return "Good";
-          if (s >= 40) return "Fair";
-          return "Average";
+          if (s >= 90) return "Exceptional";
+          if (s >= 75) return "Great";
+          if (s >= 60) return "Good";
+          if (s >= 45) return "Fair";
+          if (s >= 30) return "Average";
+          return "Poor";
         };
 
+        // Get score style - aligned with new scoring thresholds
         const getScoreStyle = (s: number) => {
-          if (s >= 80) return { bg: "rgba(52, 211, 153, 0.2)", border: "rgba(52, 211, 153, 0.4)", text: "#34d399" };
-          if (s >= 65) return { bg: "rgba(45, 212, 191, 0.2)", border: "rgba(45, 212, 191, 0.4)", text: "#2dd4bf" };
-          if (s >= 50) return { bg: "rgba(6, 182, 212, 0.2)", border: "rgba(6, 182, 212, 0.4)", text: "#06b6d4" };
-          if (s >= 40) return { bg: "rgba(250, 204, 21, 0.2)", border: "rgba(250, 204, 21, 0.4)", text: "#facc15" };
-          return { bg: "rgba(100, 116, 139, 0.2)", border: "rgba(100, 116, 139, 0.4)", text: "#64748b" };
+          if (s >= 90) return { bg: "rgba(52, 211, 153, 0.2)", border: "rgba(52, 211, 153, 0.4)", text: "#34d399" };   // emerald
+          if (s >= 75) return { bg: "rgba(74, 222, 128, 0.2)", border: "rgba(74, 222, 128, 0.4)", text: "#4ade80" };   // green
+          if (s >= 60) return { bg: "rgba(163, 230, 53, 0.2)", border: "rgba(163, 230, 53, 0.4)", text: "#a3e635" };   // lime
+          if (s >= 45) return { bg: "rgba(250, 204, 21, 0.2)", border: "rgba(250, 204, 21, 0.4)", text: "#facc15" };   // yellow
+          if (s >= 30) return { bg: "rgba(251, 146, 60, 0.2)", border: "rgba(251, 146, 60, 0.4)", text: "#fb923c" };   // orange
+          return { bg: "rgba(100, 116, 139, 0.2)", border: "rgba(100, 116, 139, 0.4)", text: "#64748b" };              // gray
         };
 
         // Format bonus/modifier with sign

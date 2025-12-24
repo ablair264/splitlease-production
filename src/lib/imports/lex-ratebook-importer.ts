@@ -13,6 +13,7 @@ const LEX_COLUMN_MAP: Record<string, string> = {
   Commercial: "isCommercial",
   CO2_g_per_km: "co2Gkm",
   P11D: "p11d",
+  Basic_List_Price: "basicListPrice", // Important for accurate scoring
   Term: "term",
   Mileage: "annualMileage",
   Rental: "totalRental",
