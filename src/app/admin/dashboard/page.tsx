@@ -140,22 +140,22 @@ export default function DashboardPage() {
   return (
     <div className="space-y-6">
       {/* Page Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-white">Pricing Dashboard</h1>
+          <h1 className="text-xl md:text-2xl font-bold text-white">Pricing Dashboard</h1>
           <p className="text-sm text-gray-400">
             Overview of rates, deals, and provider performance
           </p>
         </div>
 
         {/* Contract Type Toggle */}
-        <div className="flex items-center gap-2 bg-[#121821] rounded-xl p-1 border border-gray-800">
+        <div className="flex items-center gap-1 md:gap-2 bg-[#121821] rounded-xl p-1 border border-gray-800 overflow-x-auto">
           {CONTRACT_TYPES.map((type) => (
             <button
               key={type.value}
               onClick={() => setContractType(type.value)}
               className={cn(
-                "px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors",
+                "px-2 md:px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap",
                 contractType === type.value
                   ? "bg-cyan-500 text-[#0f1419]"
                   : "text-gray-400 hover:text-white"
@@ -205,60 +205,60 @@ export default function DashboardPage() {
       )}
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
         {/* Vehicles with Rates */}
-        <div className="bg-[#161c24] rounded-xl border border-gray-800 p-5">
-          <div className="flex items-center justify-between mb-3">
-            <div className="p-2.5 bg-cyan-500/10 rounded-lg">
-              <Car className="h-5 w-5 text-cyan-400" />
+        <div className="bg-[#161c24] rounded-xl border border-gray-800 p-3 md:p-5">
+          <div className="flex items-center justify-between mb-2 md:mb-3">
+            <div className="p-2 md:p-2.5 bg-cyan-500/10 rounded-lg">
+              <Car className="h-4 w-4 md:h-5 md:w-5 text-cyan-400" />
             </div>
           </div>
-          <div className="text-3xl font-bold text-white mb-1">
+          <div className="text-2xl md:text-3xl font-bold text-white mb-1">
             {isLoading ? "—" : stats?.kpis.vehiclesWithRates.toLocaleString()}
           </div>
-          <div className="text-sm text-gray-400">Vehicles with Rates</div>
+          <div className="text-xs md:text-sm text-gray-400">Vehicles with Rates</div>
         </div>
 
         {/* Hot Deals */}
-        <div className="bg-[#161c24] rounded-xl border border-gray-800 p-5">
-          <div className="flex items-center justify-between mb-3">
-            <div className="p-2.5 bg-emerald-500/10 rounded-lg">
-              <Sparkles className="h-5 w-5 text-emerald-400" />
+        <div className="bg-[#161c24] rounded-xl border border-gray-800 p-3 md:p-5">
+          <div className="flex items-center justify-between mb-2 md:mb-3">
+            <div className="p-2 md:p-2.5 bg-emerald-500/10 rounded-lg">
+              <Sparkles className="h-4 w-4 md:h-5 md:w-5 text-emerald-400" />
             </div>
-            <span className="text-xs text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full">
-              Score 80+
+            <span className="text-[10px] md:text-xs text-emerald-400 bg-emerald-500/10 px-1.5 md:px-2 py-0.5 rounded-full">
+              80+
             </span>
           </div>
-          <div className="text-3xl font-bold text-white mb-1">
+          <div className="text-2xl md:text-3xl font-bold text-white mb-1">
             {isLoading ? "—" : stats?.kpis.hotDeals.toLocaleString()}
           </div>
-          <div className="text-sm text-gray-400">Hot Deals</div>
+          <div className="text-xs md:text-sm text-gray-400">Hot Deals</div>
         </div>
 
         {/* Rate Freshness */}
-        <div className="bg-[#161c24] rounded-xl border border-gray-800 p-5">
-          <div className="flex items-center justify-between mb-3">
-            <div className="p-2.5 bg-teal-500/10 rounded-lg">
-              <RefreshCw className="h-5 w-5 text-teal-400" />
+        <div className="bg-[#161c24] rounded-xl border border-gray-800 p-3 md:p-5">
+          <div className="flex items-center justify-between mb-2 md:mb-3">
+            <div className="p-2 md:p-2.5 bg-teal-500/10 rounded-lg">
+              <RefreshCw className="h-4 w-4 md:h-5 md:w-5 text-teal-400" />
             </div>
           </div>
-          <div className="text-3xl font-bold text-white mb-1">
+          <div className="text-2xl md:text-3xl font-bold text-white mb-1">
             {isLoading ? "—" : `${stats?.kpis.rateFreshness}%`}
           </div>
-          <div className="text-sm text-gray-400">Rate Freshness</div>
+          <div className="text-xs md:text-sm text-gray-400">Rate Freshness</div>
         </div>
 
         {/* Providers */}
-        <div className="bg-[#161c24] rounded-xl border border-gray-800 p-5">
-          <div className="flex items-center justify-between mb-3">
-            <div className="p-2.5 bg-indigo-500/10 rounded-lg">
-              <Building2 className="h-5 w-5 text-indigo-400" />
+        <div className="bg-[#161c24] rounded-xl border border-gray-800 p-3 md:p-5">
+          <div className="flex items-center justify-between mb-2 md:mb-3">
+            <div className="p-2 md:p-2.5 bg-indigo-500/10 rounded-lg">
+              <Building2 className="h-4 w-4 md:h-5 md:w-5 text-indigo-400" />
             </div>
           </div>
-          <div className="text-3xl font-bold text-white mb-1">
+          <div className="text-2xl md:text-3xl font-bold text-white mb-1">
             {isLoading ? "—" : stats?.kpis.providerCount}
           </div>
-          <div className="text-sm text-gray-400">Active Providers</div>
+          <div className="text-xs md:text-sm text-gray-400">Active Providers</div>
         </div>
       </div>
 
@@ -289,116 +289,182 @@ export default function DashboardPage() {
 
       {/* Best Deals Table */}
       <div className="bg-[#161c24] rounded-xl border border-gray-800 overflow-hidden">
-        <div className="px-5 py-4 border-b border-gray-800 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Crown className="h-5 w-5 text-amber-400" />
-            <h2 className="text-lg font-semibold text-white">Today's Best Deals</h2>
+        <div className="px-4 md:px-5 py-3 md:py-4 border-b border-gray-800 flex flex-col md:flex-row md:items-center justify-between gap-2">
+          <div className="flex items-center gap-2 md:gap-3">
+            <Crown className="h-4 w-4 md:h-5 md:w-5 text-amber-400" />
+            <h2 className="text-base md:text-lg font-semibold text-white">Today's Best Deals</h2>
             <span className="text-xs text-gray-500">
-              {term}mo / {(mileage / 1000).toFixed(0)}k miles
+              {term}mo / {(mileage / 1000).toFixed(0)}k mi
             </span>
           </div>
           <Link
             href="/admin/deals"
-            className="text-sm text-cyan-400 hover:text-cyan-300 flex items-center gap-1"
+            className="text-xs md:text-sm text-cyan-400 hover:text-cyan-300 flex items-center gap-1"
           >
-            Manage featured <ArrowRight className="h-4 w-4" />
+            Manage <ArrowRight className="h-3 w-3 md:h-4 md:w-4" />
           </Link>
         </div>
 
         {isLoading ? (
-          <div className="p-6 space-y-3">
+          <div className="p-4 md:p-6 space-y-3">
             {[...Array(5)].map((_, i) => (
               <div key={i} className="h-16 bg-gray-800/50 rounded-lg animate-pulse" />
             ))}
           </div>
         ) : stats?.bestDeals && stats.bestDeals.length > 0 ? (
-          <div className="divide-y divide-gray-800">
-            {stats.bestDeals.map((deal) => (
-              <div
-                key={deal.capCode}
-                className="px-5 py-4 flex items-center gap-4 hover:bg-gray-800/30 transition-colors"
-              >
-                {/* Rank */}
-                <div className="w-8 text-center">
-                  {deal.rank <= 3 ? (
-                    <div
-                      className={cn(
-                        "inline-flex items-center justify-center w-7 h-7 rounded-full font-bold text-sm",
-                        deal.rank === 1 && "bg-amber-500/20 text-amber-400",
-                        deal.rank === 2 && "bg-gray-400/20 text-gray-300",
-                        deal.rank === 3 && "bg-orange-500/20 text-orange-400"
+          <>
+            {/* Mobile Card View */}
+            <div className="md:hidden divide-y divide-gray-800">
+              {stats.bestDeals.map((deal) => (
+                <div key={deal.capCode} className="p-4 space-y-3">
+                  <div className="flex items-start gap-3">
+                    {/* Rank */}
+                    <div className="shrink-0">
+                      {deal.rank <= 3 ? (
+                        <div
+                          className={cn(
+                            "inline-flex items-center justify-center w-6 h-6 rounded-full font-bold text-xs",
+                            deal.rank === 1 && "bg-amber-500/20 text-amber-400",
+                            deal.rank === 2 && "bg-gray-400/20 text-gray-300",
+                            deal.rank === 3 && "bg-orange-500/20 text-orange-400"
+                          )}
+                        >
+                          {deal.rank}
+                        </div>
+                      ) : (
+                        <span className="text-gray-600 text-xs w-6 text-center inline-block">{deal.rank}</span>
                       )}
-                    >
-                      {deal.rank}
                     </div>
-                  ) : (
-                    <span className="text-gray-600 text-sm">{deal.rank}</span>
-                  )}
-                </div>
 
-                {/* Vehicle Image */}
-                {deal.imageUrl ? (
-                  <img
-                    src={deal.imageUrl}
-                    alt=""
-                    className="w-16 h-10 object-cover rounded"
-                  />
-                ) : (
-                  <div className="w-16 h-10 bg-gray-800 rounded flex items-center justify-center">
-                    <Car className="h-5 w-5 text-gray-600" />
-                  </div>
-                )}
-
-                {/* Vehicle Info - VARIANT PROMINENT */}
-                <div className="flex-1 min-w-0">
-                  <div className="text-xs text-gray-500 mb-0.5">{deal.manufacturer}</div>
-                  <div className="font-medium text-white truncate">
-                    {deal.displayName}
-                  </div>
-                  <div className="flex items-center gap-2 text-xs text-gray-500 mt-0.5">
-                    {deal.fuelType && (
-                      <span className="flex items-center gap-1">
-                        {deal.fuelType === "Electric" ? (
-                          <Zap className="h-3 w-3 text-green-400" />
-                        ) : (
-                          <Fuel className="h-3 w-3" />
+                    {/* Vehicle Info */}
+                    <div className="flex-1 min-w-0">
+                      <div className="text-xs text-gray-500">{deal.manufacturer}</div>
+                      <div className="font-medium text-white text-sm truncate">{deal.displayName}</div>
+                      <div className="flex items-center gap-2 text-xs text-gray-500 mt-0.5">
+                        {deal.fuelType && (
+                          <span className="flex items-center gap-1">
+                            {deal.fuelType === "Electric" ? (
+                              <Zap className="h-3 w-3 text-green-400" />
+                            ) : (
+                              <Fuel className="h-3 w-3" />
+                            )}
+                            {deal.fuelType}
+                          </span>
                         )}
-                        {deal.fuelType}
-                      </span>
+                        <span className="text-gray-600">•</span>
+                        <span>{deal.providerName}</span>
+                      </div>
+                    </div>
+
+                    {/* Price & Score */}
+                    <div className="text-right shrink-0">
+                      <div className="font-semibold text-white text-sm">£{deal.monthlyPriceGbp}/mo</div>
+                      <ScoreBadge score={deal.score} size="sm" />
+                    </div>
+                  </div>
+
+                  {/* Feature Button */}
+                  <button
+                    onClick={() => featureMutation.mutate(deal)}
+                    disabled={featureMutation.isPending}
+                    className="w-full flex items-center justify-center gap-1.5 px-3 py-2 bg-cyan-500/10 border border-cyan-500/30 rounded-lg text-cyan-400 text-xs hover:bg-cyan-500/20 transition-colors disabled:opacity-50"
+                  >
+                    <Star className="h-3 w-3" />
+                    Feature this deal
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            {/* Desktop Table View */}
+            <div className="hidden md:block divide-y divide-gray-800">
+              {stats.bestDeals.map((deal) => (
+                <div
+                  key={deal.capCode}
+                  className="px-5 py-4 flex items-center gap-4 hover:bg-gray-800/30 transition-colors"
+                >
+                  {/* Rank */}
+                  <div className="w-8 text-center">
+                    {deal.rank <= 3 ? (
+                      <div
+                        className={cn(
+                          "inline-flex items-center justify-center w-7 h-7 rounded-full font-bold text-sm",
+                          deal.rank === 1 && "bg-amber-500/20 text-amber-400",
+                          deal.rank === 2 && "bg-gray-400/20 text-gray-300",
+                          deal.rank === 3 && "bg-orange-500/20 text-orange-400"
+                        )}
+                      >
+                        {deal.rank}
+                      </div>
+                    ) : (
+                      <span className="text-gray-600 text-sm">{deal.rank}</span>
                     )}
                   </div>
-                </div>
 
-                {/* Provider */}
-                <div className="text-sm text-gray-400 w-28 truncate">
-                  {deal.providerName}
-                </div>
+                  {/* Vehicle Image */}
+                  {deal.imageUrl ? (
+                    <img
+                      src={deal.imageUrl}
+                      alt=""
+                      className="w-16 h-10 object-cover rounded"
+                    />
+                  ) : (
+                    <div className="w-16 h-10 bg-gray-800 rounded flex items-center justify-center">
+                      <Car className="h-5 w-5 text-gray-600" />
+                    </div>
+                  )}
 
-                {/* Price */}
-                <div className="text-right w-24">
-                  <div className="font-semibold text-white">
-                    £{deal.monthlyPriceGbp}/mo
+                  {/* Vehicle Info - VARIANT PROMINENT */}
+                  <div className="flex-1 min-w-0">
+                    <div className="text-xs text-gray-500 mb-0.5">{deal.manufacturer}</div>
+                    <div className="font-medium text-white truncate">
+                      {deal.displayName}
+                    </div>
+                    <div className="flex items-center gap-2 text-xs text-gray-500 mt-0.5">
+                      {deal.fuelType && (
+                        <span className="flex items-center gap-1">
+                          {deal.fuelType === "Electric" ? (
+                            <Zap className="h-3 w-3 text-green-400" />
+                          ) : (
+                            <Fuel className="h-3 w-3" />
+                          )}
+                          {deal.fuelType}
+                        </span>
+                      )}
+                    </div>
                   </div>
-                  <div className="text-xs text-gray-500">
-                    P11D £{deal.p11dGbp.toLocaleString()}
+
+                  {/* Provider */}
+                  <div className="text-sm text-gray-400 w-28 truncate">
+                    {deal.providerName}
                   </div>
+
+                  {/* Price */}
+                  <div className="text-right w-24">
+                    <div className="font-semibold text-white">
+                      £{deal.monthlyPriceGbp}/mo
+                    </div>
+                    <div className="text-xs text-gray-500">
+                      P11D £{deal.p11dGbp.toLocaleString()}
+                    </div>
+                  </div>
+
+                  {/* Score */}
+                  <ScoreBadge score={deal.score} size="md" />
+
+                  {/* Feature Button */}
+                  <button
+                    onClick={() => featureMutation.mutate(deal)}
+                    disabled={featureMutation.isPending}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-cyan-500/10 border border-cyan-500/30 rounded-lg text-cyan-400 text-sm hover:bg-cyan-500/20 transition-colors disabled:opacity-50"
+                  >
+                    <Star className="h-3.5 w-3.5" />
+                    Feature
+                  </button>
                 </div>
-
-                {/* Score */}
-                <ScoreBadge score={deal.score} size="md" />
-
-                {/* Feature Button */}
-                <button
-                  onClick={() => featureMutation.mutate(deal)}
-                  disabled={featureMutation.isPending}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-cyan-500/10 border border-cyan-500/30 rounded-lg text-cyan-400 text-sm hover:bg-cyan-500/20 transition-colors disabled:opacity-50"
-                >
-                  <Star className="h-3.5 w-3.5" />
-                  Feature
-                </button>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          </>
         ) : (
           <div className="p-8 text-center text-gray-500">
             No deals found for current filters

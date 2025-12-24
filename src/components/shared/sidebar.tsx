@@ -19,10 +19,12 @@ import {
   Building2,
   FileSpreadsheet,
   Zap,
+  Menu,
+  X,
   type LucideIcon,
 } from "lucide-react";
 import type { User } from "next-auth";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 type SidebarProps = {
   user: User;
@@ -79,6 +81,33 @@ const navigation: NavSection[] = [
 export function Sidebar({ user }: SidebarProps) {
   const pathname = usePathname();
   const [isExpanded, setIsExpanded] = useState(true);
+  const [isMobileOpen, setIsMobileOpen] = useState(false);
+
+  // Close mobile menu on route change
+  useEffect(() => {
+    setIsMobileOpen(false);
+  }, [pathname]);
+
+  // Close mobile menu on escape key
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setIsMobileOpen(false);
+    };
+    document.addEventListener("keydown", handleEscape);
+    return () => document.removeEventListener("keydown", handleEscape);
+  }, []);
+
+  // Prevent body scroll when mobile menu is open
+  useEffect(() => {
+    if (isMobileOpen) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "";
+    }
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [isMobileOpen]);
 
   const isActive = (href: string) => {
     if (href === "/admin/dashboard") {
@@ -87,29 +116,12 @@ export function Sidebar({ user }: SidebarProps) {
     return pathname.startsWith(href);
   };
 
-  return (
-    <aside
-      className={cn(
-        "bg-[#161c24] flex flex-col h-full transition-all duration-300 ease-in-out relative z-20 shrink-0",
-        isExpanded ? "w-64" : "w-20"
-      )}
-    >
-      {/* Toggle Button */}
-      <button
-        onClick={() => setIsExpanded(!isExpanded)}
-        className="absolute -right-3 top-10 bg-[#79d5e9] text-white p-1 rounded-full shadow-lg hover:bg-[#4daeac] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#79d5e9] z-50 border-2 border-[#161c24]"
-      >
-        {isExpanded ? (
-          <ChevronLeft className="h-4 w-4 text-[#161c24]" />
-        ) : (
-          <ChevronRight className="h-4 w-4 text-[#161c24]" />
-        )}
-      </button>
-
+  const sidebarContent = (
+    <>
       {/* Logo Section */}
       <div className="h-16 flex items-center px-4 shrink-0 border-b border-gray-800/50">
         <Link href="/admin/dashboard" className="flex items-center">
-          {isExpanded ? (
+          {isExpanded || isMobileOpen ? (
             <Image
               src="/images/logo.webp"
               alt="SplitLease Logo"
@@ -124,6 +136,13 @@ export function Sidebar({ user }: SidebarProps) {
             </div>
           )}
         </Link>
+        {/* Mobile close button */}
+        <button
+          onClick={() => setIsMobileOpen(false)}
+          className="ml-auto p-2 text-gray-400 hover:text-white md:hidden"
+        >
+          <X className="h-5 w-5" />
+        </button>
       </div>
 
       {/* Navigation */}
@@ -131,7 +150,7 @@ export function Sidebar({ user }: SidebarProps) {
         {navigation.map((section, sectionIndex) => (
           <div key={section.name}>
             {/* Section Label */}
-            {isExpanded ? (
+            {(isExpanded || isMobileOpen) ? (
               <div
                 className={cn(
                   "px-3 mb-2 text-[11px] font-semibold text-gray-500 uppercase tracking-wider",
@@ -158,7 +177,7 @@ export function Sidebar({ user }: SidebarProps) {
                         ? "text-white bg-[#79d5e9]/10 border border-[#79d5e9]/20"
                         : "text-gray-400 hover:text-white hover:bg-white/5"
                     )}
-                    title={!isExpanded ? item.name : undefined}
+                    title={!isExpanded && !isMobileOpen ? item.name : undefined}
                   >
                     <item.icon
                       className={cn(
@@ -166,7 +185,7 @@ export function Sidebar({ user }: SidebarProps) {
                         active ? "text-[#79d5e9]" : "group-hover:text-[#79d5e9]"
                       )}
                     />
-                    {isExpanded && (
+                    {(isExpanded || isMobileOpen) && (
                       <>
                         <span className="ml-3 whitespace-nowrap">
                           {item.name}
@@ -204,7 +223,7 @@ export function Sidebar({ user }: SidebarProps) {
             </div>
             <span className="absolute bottom-0 right-0 block h-2.5 w-2.5 rounded-full ring-2 ring-[#161c24] bg-[#4d9869]" />
           </div>
-          {isExpanded && (
+          {(isExpanded || isMobileOpen) && (
             <div className="ml-3 overflow-hidden">
               <p className="text-sm font-medium text-white truncate">
                 {user.name || "User"}
@@ -219,16 +238,80 @@ export function Sidebar({ user }: SidebarProps) {
             type="submit"
             className={cn(
               "flex items-center w-full py-2 rounded-lg text-xs font-medium transition-all duration-200",
-              isExpanded ? "justify-center gap-2 px-3" : "justify-center px-2",
+              (isExpanded || isMobileOpen) ? "justify-center gap-2 px-3" : "justify-center px-2",
               "text-red-400 bg-red-500/10 border border-red-500/20 hover:bg-red-500/20"
             )}
-            title={!isExpanded ? "Sign out" : undefined}
+            title={!isExpanded && !isMobileOpen ? "Sign out" : undefined}
           >
             <LogOut className="h-4 w-4 shrink-0" />
-            {isExpanded && <span>Sign Out</span>}
+            {(isExpanded || isMobileOpen) && <span>Sign Out</span>}
           </button>
         </form>
       </div>
-    </aside>
+    </>
+  );
+
+  return (
+    <>
+      {/* Mobile Header Bar */}
+      <div className="fixed top-0 left-0 right-0 h-14 bg-[#161c24] border-b border-gray-800 flex items-center px-4 z-40 md:hidden">
+        <button
+          onClick={() => setIsMobileOpen(true)}
+          className="p-2 -ml-2 text-gray-400 hover:text-white"
+        >
+          <Menu className="h-6 w-6" />
+        </button>
+        <Link href="/admin/dashboard" className="ml-3">
+          <Image
+            src="/images/logo.webp"
+            alt="SplitLease Logo"
+            width={120}
+            height={32}
+            className="object-contain"
+            priority
+          />
+        </Link>
+      </div>
+
+      {/* Mobile Overlay */}
+      {isMobileOpen && (
+        <div
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 md:hidden"
+          onClick={() => setIsMobileOpen(false)}
+        />
+      )}
+
+      {/* Mobile Sidebar */}
+      <aside
+        className={cn(
+          "fixed inset-y-0 left-0 w-72 bg-[#161c24] flex flex-col z-50 transform transition-transform duration-300 ease-in-out md:hidden",
+          isMobileOpen ? "translate-x-0" : "-translate-x-full"
+        )}
+      >
+        {sidebarContent}
+      </aside>
+
+      {/* Desktop Sidebar */}
+      <aside
+        className={cn(
+          "hidden md:flex bg-[#161c24] flex-col h-full transition-all duration-300 ease-in-out relative z-20 shrink-0",
+          isExpanded ? "w-64" : "w-20"
+        )}
+      >
+        {/* Toggle Button */}
+        <button
+          onClick={() => setIsExpanded(!isExpanded)}
+          className="absolute -right-3 top-10 bg-[#79d5e9] text-white p-1 rounded-full shadow-lg hover:bg-[#4daeac] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#79d5e9] z-50 border-2 border-[#161c24]"
+        >
+          {isExpanded ? (
+            <ChevronLeft className="h-4 w-4 text-[#161c24]" />
+          ) : (
+            <ChevronRight className="h-4 w-4 text-[#161c24]" />
+          )}
+        </button>
+
+        {sidebarContent}
+      </aside>
+    </>
   );
 }

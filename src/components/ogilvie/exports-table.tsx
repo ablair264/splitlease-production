@@ -111,6 +111,16 @@ export function OgilvieExportsTable({ refreshTrigger }: ExportsTableProps) {
     });
   };
 
+  const formatDateShort = (dateStr: string) => {
+    const date = new Date(dateStr);
+    return date.toLocaleDateString("en-GB", {
+      day: "2-digit",
+      month: "short",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  };
+
   if (isLoading) {
     return (
       <div
@@ -148,7 +158,7 @@ export function OgilvieExportsTable({ refreshTrigger }: ExportsTableProps) {
       }}
     >
       {/* Header */}
-      <div className="flex items-center justify-between px-5 py-3 border-b border-white/10">
+      <div className="flex items-center justify-between px-4 md:px-5 py-3 border-b border-white/10">
         <h3 className="text-sm font-semibold text-white/90">Export History</h3>
         <button
           onClick={fetchExports}
@@ -159,8 +169,69 @@ export function OgilvieExportsTable({ refreshTrigger }: ExportsTableProps) {
         </button>
       </div>
 
-      {/* Table */}
-      <div className="overflow-x-auto">
+      {/* Mobile Card View */}
+      <div className="md:hidden divide-y divide-white/5">
+        {exports.map((exp) => (
+          <div key={exp.id} className="p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                {getStatusIcon(exp.status)}
+                <span className={`text-sm capitalize ${getStatusColor(exp.status)}`}>
+                  {exp.status}
+                </span>
+              </div>
+              <div className="text-xs text-white/50">
+                {formatDateShort(exp.createdAt)}
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between">
+              <div className="text-sm text-white">
+                {exp.contractTerm}mo / {exp.contractMileage.toLocaleString()} mi
+              </div>
+              <div className="text-sm text-white/70">
+                {exp.exportedRows?.toLocaleString() || "-"} vehicles
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              {exp.hasCsvData && exp.status === "completed" && (
+                <a
+                  href={`/api/admin/ogilvie/download/${exp.batchId}`}
+                  className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium transition-all duration-200"
+                  style={{
+                    background: "rgba(121, 213, 233, 0.1)",
+                    border: "1px solid rgba(121, 213, 233, 0.3)",
+                    color: "#79d5e9",
+                  }}
+                >
+                  <Download className="h-3 w-3" />
+                  Download CSV
+                </a>
+              )}
+              <button
+                onClick={() => handleDelete(exp.batchId)}
+                disabled={deletingId === exp.batchId}
+                className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium transition-all duration-200 disabled:opacity-50"
+                style={{
+                  background: "rgba(239, 68, 68, 0.1)",
+                  border: "1px solid rgba(239, 68, 68, 0.3)",
+                  color: "#ef4444",
+                }}
+              >
+                {deletingId === exp.batchId ? (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                ) : (
+                  <Trash2 className="h-3 w-3" />
+                )}
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Desktop Table View */}
+      <div className="hidden md:block overflow-x-auto">
         <table className="w-full">
           <thead>
             <tr className="border-b border-white/10">

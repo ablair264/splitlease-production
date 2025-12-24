@@ -93,10 +93,6 @@ const CONTRACT_TYPES = [
 const TERMS = [24, 30, 36, 42, 48, 54, 60];
 const MILEAGES = [5000, 6000, 7000, 8000, 9000, 10000, 12000, 15000, 20000, 25000, 30000];
 
-function getApiBaseUrl(): string {
-  return process.env.NEXT_PUBLIC_API_URL || "https://splitfin-broker-production.up.railway.app";
-}
-
 export default function LexPlaywrightPage() {
   // Vehicles
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
@@ -128,10 +124,10 @@ export default function LexPlaywrightPage() {
   // SSE ref
   const eventSourceRef = useRef<EventSource | null>(null);
 
-  // Load vehicles
+  // Load vehicles via local proxy
   const loadVehicles = async () => {
     try {
-      const response = await fetch(`${getApiBaseUrl()}/api/lex-playwright/vehicles?limit=500`);
+      const response = await fetch("/api/admin/lex-playwright?action=vehicles&limit=500");
       if (response.ok) {
         const data = await response.json();
         setVehicles(data.vehicles || []);
@@ -143,10 +139,10 @@ export default function LexPlaywrightPage() {
     }
   };
 
-  // Load batch history
+  // Load batch history via local proxy
   const loadBatches = async () => {
     try {
-      const response = await fetch(`${getApiBaseUrl()}/api/lex-playwright/batches`);
+      const response = await fetch("/api/admin/lex-playwright?action=batches");
       if (response.ok) {
         const data = await response.json();
         setBatches(data.batches || []);
@@ -249,13 +245,13 @@ export default function LexPlaywrightPage() {
     );
   }, [selectedVehicles, selectedTerms, selectedMileages, selectedContractTypes, selectedPaymentPlans]);
 
-  // Connect to SSE stream
+  // Connect to SSE stream via local proxy
   const connectToStream = useCallback((batchId: string) => {
     if (eventSourceRef.current) {
       eventSourceRef.current.close();
     }
 
-    const es = new EventSource(`${getApiBaseUrl()}/api/lex-playwright/batch/${batchId}/stream`);
+    const es = new EventSource(`/api/admin/lex-playwright/stream?batchId=${batchId}`);
     eventSourceRef.current = es;
 
     es.addEventListener("progress", (event) => {
@@ -292,10 +288,10 @@ export default function LexPlaywrightPage() {
     };
   }, []);
 
-  // Load batch results
+  // Load batch results via local proxy
   const loadBatchResults = async (batchId: string) => {
     try {
-      const response = await fetch(`${getApiBaseUrl()}/api/lex-playwright/batch/${batchId}`);
+      const response = await fetch(`/api/admin/lex-playwright?action=batch&batchId=${batchId}`);
       if (response.ok) {
         const data = await response.json();
         setQuotes(data.quotes || []);
@@ -306,7 +302,7 @@ export default function LexPlaywrightPage() {
     loadBatches();
   };
 
-  // Start batch
+  // Start batch via local proxy
   const startBatch = async () => {
     if (selectedVehicles.size === 0) return;
 
@@ -316,7 +312,7 @@ export default function LexPlaywrightPage() {
     setQuotes([]);
 
     try {
-      const response = await fetch(`${getApiBaseUrl()}/api/lex-playwright/batch`, {
+      const response = await fetch("/api/admin/lex-playwright", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
