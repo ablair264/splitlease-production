@@ -1,18 +1,30 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { X, Loader2, CheckCircle, XCircle, Download, Clock } from "lucide-react";
 
 type ExportProgress = {
-  status: "preparing" | "exporting" | "downloading" | "inserting" | "completed" | "error";
+  status: string;
   currentPage: number;
   totalPages: number;
   vehiclesProcessed: number;
-  configIndex: number;
+};
+
+type JobStatus = {
+  jobId: string;
+  status: "running" | "completed" | "failed";
+  currentConfigIndex: number;
   totalConfigs: number;
-  currentConfig?: { contractTerm: number; contractMileage: number };
+  currentProgress: ExportProgress | null;
+  results: Array<{
+    config: { contractTerm: number; contractMileage: number };
+    success: boolean;
+    batchId?: string;
+    error?: string;
+  }>;
+  startedAt: string;
+  completedAt?: string;
   error?: string;
-  batchId?: string;
 };
 
 type ExportProgressModalProps = {
@@ -23,56 +35,101 @@ type ExportProgressModalProps = {
 };
 
 export function ExportProgressModal({ isOpen, onClose, configs, onComplete }: ExportProgressModalProps) {
-  const [progress, setProgress] = useState<ExportProgress | null>(null);
-  const [results, setResults] = useState<Array<{ config: { contractTerm: number; contractMileage: number }; batchId?: string; success: boolean; error?: string }>>([]);
-  const [isComplete, setIsComplete] = useState(false);
+  const [jobId, setJobId] = useState<string | null>(null);
+  const [jobStatus, setJobStatus] = useState<JobStatus | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [startTime, setStartTime] = useState<number | null>(null);
   const [elapsed, setElapsed] = useState(0);
+  const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  useEffect(() => {
-    if (!isOpen || configs.length === 0) return;
+  const isComplete = jobStatus?.status === "completed" || jobStatus?.status === "failed";
 
-    setProgress(null);
-    setResults([]);
-    setIsComplete(false);
-    setStartTime(Date.now());
-    setElapsed(0);
+  // Start the export job
+  const startExport = useCallback(async () => {
+    try {
+      setError(null);
+      setJobId(null);
+      setJobStatus(null);
+      setStartTime(Date.now());
+      setElapsed(0);
 
-    // Start the export with SSE (using internal proxy route for auth)
-    const eventSource = new EventSource(
-      `/api/admin/ogilvie/stream?configs=${encodeURIComponent(JSON.stringify(configs))}`
-    );
+      const response = await fetch("/api/admin/ogilvie/stream", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ configs }),
+      });
 
-    eventSource.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
+      const data = await response.json();
 
-        if (data.type === "progress") {
-          setProgress(data.progress);
-        } else if (data.type === "configComplete") {
-          setResults((prev) => [...prev, data.result]);
-        } else if (data.type === "complete") {
-          setIsComplete(true);
-          eventSource.close();
-          onComplete?.(data.results);
-        } else if (data.type === "error") {
-          setProgress((prev) => prev ? { ...prev, status: "error", error: data.error } : null);
-          eventSource.close();
-        }
-      } catch (e) {
-        console.error("Failed to parse SSE data:", e);
+      if (!response.ok) {
+        setError(data.error || "Failed to start export");
+        return;
       }
-    };
 
-    eventSource.onerror = () => {
-      eventSource.close();
-      setProgress((prev) => prev ? { ...prev, status: "error", error: "Connection lost" } : null);
-    };
+      setJobId(data.jobId);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to start export");
+    }
+  }, [configs]);
+
+  // Poll for status
+  const pollStatus = useCallback(async () => {
+    if (!jobId) return;
+
+    try {
+      const response = await fetch(`/api/admin/ogilvie/stream?jobId=${jobId}`);
+      const data = await response.json();
+
+      if (!response.ok) {
+        setError(data.error || "Failed to get status");
+        return;
+      }
+
+      setJobStatus(data);
+
+      // If complete, stop polling and notify parent
+      if (data.status === "completed" || data.status === "failed") {
+        if (pollIntervalRef.current) {
+          clearInterval(pollIntervalRef.current);
+          pollIntervalRef.current = null;
+        }
+        onComplete?.(data.results);
+      }
+    } catch (e) {
+      console.error("Poll error:", e);
+    }
+  }, [jobId, onComplete]);
+
+  // Start export when modal opens
+  useEffect(() => {
+    if (isOpen && configs.length > 0) {
+      startExport();
+    }
 
     return () => {
-      eventSource.close();
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
+        pollIntervalRef.current = null;
+      }
     };
-  }, [isOpen, configs]);
+  }, [isOpen, configs, startExport]);
+
+  // Start polling when we have a job ID
+  useEffect(() => {
+    if (jobId && !pollIntervalRef.current) {
+      // Poll immediately
+      pollStatus();
+      // Then poll every 2 seconds
+      pollIntervalRef.current = setInterval(pollStatus, 2000);
+    }
+
+    return () => {
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
+        pollIntervalRef.current = null;
+      }
+    };
+  }, [jobId, pollStatus]);
 
   // Update elapsed time
   useEffect(() => {
@@ -93,7 +150,7 @@ export function ExportProgressModal({ isOpen, onClose, configs, onComplete }: Ex
     return `${mins}:${secs.toString().padStart(2, "0")}`;
   };
 
-  const getStatusText = (status: ExportProgress["status"]) => {
+  const getStatusText = (status: string) => {
     switch (status) {
       case "preparing": return "Preparing export...";
       case "exporting": return "Exporting vehicle data...";
@@ -106,16 +163,24 @@ export function ExportProgressModal({ isOpen, onClose, configs, onComplete }: Ex
   };
 
   const getProgressPercent = () => {
-    if (!progress) return 0;
-    if (progress.status === "completed") return 100;
-    if (progress.totalPages === 0) return 0;
+    if (!jobStatus) return 0;
+    if (jobStatus.status === "completed") return 100;
+    if (jobStatus.status === "failed") return 0;
+
+    const progress = jobStatus.currentProgress;
+    if (!progress || progress.totalPages === 0) {
+      // Base progress on config index alone
+      return (jobStatus.currentConfigIndex / jobStatus.totalConfigs) * 100;
+    }
 
     const configProgress = progress.totalPages > 0
       ? (progress.currentPage / progress.totalPages) * 100
       : 0;
-    const overallProgress = ((progress.configIndex + (configProgress / 100)) / progress.totalConfigs) * 100;
+    const overallProgress = ((jobStatus.currentConfigIndex + (configProgress / 100)) / jobStatus.totalConfigs) * 100;
     return Math.min(overallProgress, 99);
   };
+
+  const currentConfig = configs[jobStatus?.currentConfigIndex ?? 0];
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
@@ -136,7 +201,7 @@ export function ExportProgressModal({ isOpen, onClose, configs, onComplete }: Ex
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-white/10">
           <h3 className="text-lg font-semibold text-white">
-            {isComplete ? "Export Complete" : "Exporting Ogilvie Data"}
+            {isComplete ? (jobStatus?.status === "failed" ? "Export Failed" : "Export Complete") : "Exporting Ogilvie Data"}
           </h3>
           {isComplete && (
             <button
@@ -156,15 +221,25 @@ export function ExportProgressModal({ isOpen, onClose, configs, onComplete }: Ex
             <span className="text-sm font-mono">{formatTime(elapsed)}</span>
           </div>
 
+          {/* Error display */}
+          {error && (
+            <div className="mb-4 px-4 py-3 rounded-lg bg-red-500/10 border border-red-500/30">
+              <div className="flex items-center gap-2 text-red-400">
+                <XCircle className="h-4 w-4" />
+                <span className="text-sm">{error}</span>
+              </div>
+            </div>
+          )}
+
           {/* Current Status */}
-          {progress && (
+          {jobStatus && (
             <div className="mb-6">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-sm text-white/70">
-                  {getStatusText(progress.status)}
+                  {jobStatus.currentProgress ? getStatusText(jobStatus.currentProgress.status) : "Starting..."}
                 </span>
                 <span className="text-sm text-white/50">
-                  Config {progress.configIndex + 1} of {progress.totalConfigs}
+                  Config {jobStatus.currentConfigIndex + 1} of {jobStatus.totalConfigs}
                 </span>
               </div>
 
@@ -174,9 +249,9 @@ export function ExportProgressModal({ isOpen, onClose, configs, onComplete }: Ex
                   className="h-full rounded-full transition-all duration-300"
                   style={{
                     width: `${getProgressPercent()}%`,
-                    background: progress.status === "error"
+                    background: jobStatus.status === "failed"
                       ? "#ef4444"
-                      : progress.status === "completed"
+                      : jobStatus.status === "completed"
                         ? "#22c55e"
                         : "linear-gradient(90deg, #79d5e9 0%, #4daeac 100%)",
                   }}
@@ -184,39 +259,39 @@ export function ExportProgressModal({ isOpen, onClose, configs, onComplete }: Ex
               </div>
 
               {/* Details */}
-              {progress.currentConfig && (
+              {currentConfig && (
                 <div className="mt-3 text-xs text-white/40 text-center">
-                  {progress.currentConfig.contractTerm} months / {progress.currentConfig.contractMileage.toLocaleString()} miles
-                  {progress.totalPages > 0 && (
+                  {currentConfig.contractTerm} months / {currentConfig.contractMileage.toLocaleString()} miles
+                  {jobStatus.currentProgress && jobStatus.currentProgress.totalPages > 0 && (
                     <span className="ml-2">
-                      • Page {progress.currentPage} of {progress.totalPages}
+                      • Page {jobStatus.currentProgress.currentPage} of {jobStatus.currentProgress.totalPages}
                     </span>
                   )}
                 </div>
               )}
 
-              {progress.vehiclesProcessed > 0 && (
+              {jobStatus.currentProgress && jobStatus.currentProgress.vehiclesProcessed > 0 && (
                 <div className="mt-2 text-center">
                   <span className="text-2xl font-bold text-white">
-                    {progress.vehiclesProcessed.toLocaleString()}
+                    {jobStatus.currentProgress.vehiclesProcessed.toLocaleString()}
                   </span>
                   <span className="text-sm text-white/50 ml-2">vehicles processed</span>
                 </div>
               )}
 
-              {progress.error && (
+              {jobStatus.error && (
                 <div className="mt-4 px-4 py-3 rounded-lg bg-red-500/10 border border-red-500/30">
                   <div className="flex items-center gap-2 text-red-400">
                     <XCircle className="h-4 w-4" />
-                    <span className="text-sm">{progress.error}</span>
+                    <span className="text-sm">{jobStatus.error}</span>
                   </div>
                 </div>
               )}
             </div>
           )}
 
-          {/* Loading state before progress starts */}
-          {!progress && !isComplete && (
+          {/* Loading state before job starts */}
+          {!jobStatus && !error && (
             <div className="flex flex-col items-center justify-center py-8">
               <Loader2 className="h-8 w-8 text-[#79d5e9] animate-spin mb-4" />
               <span className="text-white/60">Starting export...</span>
@@ -224,12 +299,12 @@ export function ExportProgressModal({ isOpen, onClose, configs, onComplete }: Ex
           )}
 
           {/* Results */}
-          {results.length > 0 && (
+          {jobStatus && jobStatus.results.length > 0 && (
             <div className="mt-4 space-y-2">
               <h4 className="text-xs font-medium text-white/50 uppercase tracking-wide mb-2">
                 Results
               </h4>
-              {results.map((r, i) => (
+              {jobStatus.results.map((r, i) => (
                 <div
                   key={i}
                   className="flex items-center justify-between px-3 py-2.5 rounded-lg"

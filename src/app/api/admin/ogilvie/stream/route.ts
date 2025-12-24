@@ -1,4 +1,4 @@
-import { NextRequest } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import jwt from "jsonwebtoken";
 
@@ -26,56 +26,83 @@ function createApiToken(userId: string, email?: string | null, name?: string | n
 }
 
 // =============================================================================
-// GET /api/admin/ogilvie/stream - SSE streaming proxy for export progress
+// POST /api/admin/ogilvie/stream - Start export job (renamed for backwards compat)
+// =============================================================================
+
+export async function POST(request: NextRequest) {
+  const session = await auth();
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  try {
+    const body = await request.json();
+    const token = createApiToken(session.user.id, session.user.email, session.user.name);
+
+    // Start the export job on Railway
+    const response = await fetch(`${RAILWAY_API_URL}/api/ogilvie/export/start`, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      return NextResponse.json(data, { status: response.status });
+    }
+
+    return NextResponse.json(data);
+  } catch (error) {
+    console.error("Ogilvie export start error:", error);
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Failed to start export" },
+      { status: 500 }
+    );
+  }
+}
+
+// =============================================================================
+// GET /api/admin/ogilvie/stream?jobId=xxx - Poll for job status
 // =============================================================================
 
 export async function GET(request: NextRequest) {
   const session = await auth();
   if (!session?.user?.id) {
-    return new Response("Unauthorized", { status: 401 });
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const { searchParams } = new URL(request.url);
-  const configs = searchParams.get("configs");
+  const jobId = searchParams.get("jobId");
 
-  if (!configs) {
-    return new Response("configs parameter is required", { status: 400 });
+  if (!jobId) {
+    return NextResponse.json({ error: "jobId parameter is required" }, { status: 400 });
   }
 
   try {
     const token = createApiToken(session.user.id, session.user.email, session.user.name);
 
-    // Fetch from Railway with auth header
-    const railwayUrl = `${RAILWAY_API_URL}/api/ogilvie/export/stream?configs=${encodeURIComponent(configs)}`;
-
-    const response = await fetch(railwayUrl, {
+    // Poll for job status on Railway
+    const response = await fetch(`${RAILWAY_API_URL}/api/ogilvie/export/status/${jobId}`, {
       headers: {
         "Authorization": `Bearer ${token}`,
-        "Accept": "text/event-stream",
       },
     });
+
+    const data = await response.json();
 
     if (!response.ok) {
-      return new Response(`Railway API error: ${response.status}`, { status: response.status });
+      return NextResponse.json(data, { status: response.status });
     }
 
-    // Stream the response back to the client
-    const stream = response.body;
-    if (!stream) {
-      return new Response("No stream available", { status: 500 });
-    }
-
-    return new Response(stream, {
-      headers: {
-        "Content-Type": "text/event-stream",
-        "Cache-Control": "no-cache",
-        "Connection": "keep-alive",
-      },
-    });
+    return NextResponse.json(data);
   } catch (error) {
-    console.error("Ogilvie stream error:", error);
-    return new Response(
-      error instanceof Error ? error.message : "Stream request failed",
+    console.error("Ogilvie status poll error:", error);
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Failed to get status" },
       { status: 500 }
     );
   }
