@@ -376,17 +376,18 @@ function ImportWizard({ isOpen, onClose, onImportComplete }: {
 
         // Process each contract type for this file
         for (const contractType of contractTypes) {
-          const requestBody: Record<string, unknown> = {
-            providerCode: provider,
-            contractType,
+          // Use splitlease-api on Railway for imports
+          const apiBase = process.env.NEXT_PUBLIC_API_URL || "https://splitfin-broker-production.up.railway.app";
+          const queryParams = new URLSearchParams({
             fileName: detectedFile.file.name,
-            csvContent: fileContent,
-          };
+            contractType,
+            providerCode: provider,
+          });
 
-          const response = await fetch("/api/admin/ratebooks", {
+          const response = await fetch(`${apiBase}/api/admin/ratebooks/import-stream?${queryParams}`, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(requestBody),
+            headers: { "Content-Type": "text/plain" },
+            body: fileContent,
           });
 
           const data = await response.json();
