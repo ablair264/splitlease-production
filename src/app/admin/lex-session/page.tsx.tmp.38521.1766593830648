@@ -28,7 +28,7 @@ export default function LexSessionPage() {
     setStatus("loading");
 
     try {
-      const response = await apiFetch("/api/lex-autolease/session", {
+      const response = await fetch("/api/lex-autolease/session", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

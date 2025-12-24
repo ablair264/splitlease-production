@@ -10,6 +10,7 @@ import {
   Clock,
   RefreshCw,
 } from "lucide-react";
+import { apiFetch, getApiBaseUrl } from "@/lib/utils";
 
 type OgilvieExport = {
   id: string;
@@ -38,7 +39,7 @@ export function OgilvieExportsTable({ refreshTrigger }: ExportsTableProps) {
   const fetchExports = async () => {
     setIsLoading(true);
     try {
-      const response = await fetch("/api/ogilvie/exports?limit=50");
+      const response = await apiFetch("/api/ogilvie/exports?limit=50");
       const data = await response.json();
       if (data.success) {
         setExports(data.exports);
@@ -59,7 +60,7 @@ export function OgilvieExportsTable({ refreshTrigger }: ExportsTableProps) {
 
     setDeletingId(batchId);
     try {
-      const response = await fetch(`/api/ogilvie/exports/${batchId}`, {
+      const response = await apiFetch(`/api/ogilvie/exports/${batchId}`, {
         method: "DELETE",
       });
       if (response.ok) {
@@ -215,7 +216,7 @@ export function OgilvieExportsTable({ refreshTrigger }: ExportsTableProps) {
                   <div className="flex items-center justify-end gap-2">
                     {exp.hasCsvData && exp.status === "completed" && (
                       <a
-                        href={`/api/ogilvie/exports/${exp.batchId}?download=true`}
+                        href={`${getApiBaseUrl()}/api/ogilvie/exports/${exp.batchId}?download=true`}
                         className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 hover:bg-[#79d5e9]/20"
                         style={{
                           background: "rgba(121, 213, 233, 0.1)",

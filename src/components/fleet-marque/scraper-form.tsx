@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { FLEET_MARQUE_MAKES } from "@/lib/scraper/fleet-marque-constants";
 import { Loader2, Play, CheckCircle, XCircle, Key, User } from "lucide-react";
+import { apiFetch } from "@/lib/utils";
 
 type ScraperFormProps = {
   onComplete?: () => void;
@@ -70,7 +71,7 @@ export function ScraperForm({ onComplete }: ScraperFormProps) {
         ? { email, password, selectedMakes: selectedMakes.length > 0 ? selectedMakes : undefined }
         : { sid, phpsessid, selectedMakes: selectedMakes.length > 0 ? selectedMakes : undefined };
 
-      const response = await fetch("/api/fleet-marque/scrape", {
+      const response = await apiFetch("/api/fleet-marque/scrape", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body)

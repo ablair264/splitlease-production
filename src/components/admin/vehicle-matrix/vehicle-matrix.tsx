@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import type { VehicleMatrixRow } from "@/app/api/admin/vehicle-matrix/route";
 import { VehicleRatesPanel } from "./vehicle-rates-panel";
+import { apiFetch } from "@/lib/utils";
 
 type Pagination = {
   page: number;
@@ -313,7 +314,7 @@ export function VehicleMatrix() {
               }));
 
               try {
-                const response = await fetch("/api/lex-autolease/run-quotes", {
+                const response = await apiFetch("/api/lex-autolease/run-quotes", {
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
                   body: JSON.stringify({

@@ -5,6 +5,23 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+/**
+ * Get the base URL for the splitlease-api (Railway backend)
+ * Used for provider integrations (Lex, Ogilvie, Fleet Marque) and ratebook imports
+ */
+export function getApiBaseUrl(): string {
+  return process.env.NEXT_PUBLIC_API_URL || "https://splitfin-broker-production.up.railway.app";
+}
+
+/**
+ * Fetch from the Railway API backend
+ */
+export async function apiFetch(path: string, options?: RequestInit): Promise<Response> {
+  const baseUrl = getApiBaseUrl();
+  const url = path.startsWith("/") ? `${baseUrl}${path}` : `${baseUrl}/${path}`;
+  return fetch(url, options);
+}
+
 export function formatDate(date: Date | string) {
   return new Intl.DateTimeFormat("en-GB", {
     day: "numeric",

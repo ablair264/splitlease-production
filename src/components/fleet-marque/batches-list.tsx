@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Trash2, Clock, Car, Percent } from "lucide-react";
+import { apiFetch } from "@/lib/utils";
 
 type Batch = {
   scrape_batch_id: string;
@@ -24,7 +25,7 @@ export function BatchesList({ refreshTrigger, onBatchDeleted }: BatchesListProps
   const fetchBatches = async () => {
     setLoading(true);
     try {
-      const response = await fetch("/api/fleet-marque/batches");
+      const response = await apiFetch("/api/fleet-marque/batches");
       const data = await response.json();
       setBatches(data.batches || []);
     } catch (err) {
@@ -45,7 +46,7 @@ export function BatchesList({ refreshTrigger, onBatchDeleted }: BatchesListProps
 
     setDeleting(batchId);
     try {
-      await fetch("/api/fleet-marque/batches", {
+      await apiFetch("/api/fleet-marque/batches", {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ batchId })

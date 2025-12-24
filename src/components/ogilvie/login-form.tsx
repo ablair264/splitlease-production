@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Loader2, LogIn, CheckCircle, XCircle, LogOut } from "lucide-react";
+import { apiFetch } from "@/lib/utils";
 
 type LoginFormProps = {
   onLoginSuccess?: () => void;
@@ -32,7 +33,7 @@ export function OgilvieLoginForm({ onLoginSuccess, sessionStatus, onRefreshStatu
     setError(null);
 
     try {
-      const response = await fetch("/api/ogilvie/login", {
+      const response = await apiFetch("/api/ogilvie/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: loginEmail, password: loginPassword }),

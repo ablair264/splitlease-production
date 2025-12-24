@@ -5,6 +5,7 @@ import { OgilvieLoginForm } from "@/components/ogilvie/login-form";
 import { OgilvieExportForm } from "@/components/ogilvie/export-form";
 import { OgilvieExportsTable } from "@/components/ogilvie/exports-table";
 import { Download, History, LogIn } from "lucide-react";
+import { apiFetch } from "@/lib/utils";
 
 type Tab = "export" | "history";
 
@@ -23,7 +24,7 @@ export default function OgilviePage() {
   const checkSessionStatus = useCallback(async () => {
     setCheckingSession(true);
     try {
-      const response = await fetch("/api/ogilvie/validate");
+      const response = await apiFetch("/api/ogilvie/validate");
       const data = await response.json();
       setSessionStatus({
         valid: data.valid,

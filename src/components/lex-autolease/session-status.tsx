@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { CheckCircle2, XCircle, RefreshCw, Copy, Check, ExternalLink, Key } from "lucide-react";
 import { SESSION_CAPTURE_SCRIPT } from "@/lib/lex/constants";
+import { apiFetch } from "@/lib/utils";
 
 type SessionInfo = {
   hasValidSession: boolean;
@@ -26,7 +27,7 @@ export function SessionStatus({ onSessionChange }: { onSessionChange?: (hasSessi
   const checkSession = async () => {
     setLoading(true);
     try {
-      const response = await fetch("/api/lex-autolease/session");
+      const response = await apiFetch("/api/lex-autolease/session");
       const data = await response.json();
       setSession(data);
       onSessionChange?.(data.hasValidSession);
@@ -54,7 +55,7 @@ export function SessionStatus({ onSessionChange }: { onSessionChange?: (hasSessi
 
     try {
       const sessionData = JSON.parse(captureData);
-      const response = await fetch("/api/lex-autolease/session", {
+      const response = await apiFetch("/api/lex-autolease/session", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(sessionData),
@@ -77,7 +78,7 @@ export function SessionStatus({ onSessionChange }: { onSessionChange?: (hasSessi
   };
 
   const invalidateSession = async () => {
-    await fetch("/api/lex-autolease/session", { method: "DELETE" });
+    await apiFetch("/api/lex-autolease/session", { method: "DELETE" });
     checkSession();
   };
 

@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { ChevronLeft, ChevronRight, ExternalLink, Search } from "lucide-react";
 import { FLEET_MARQUE_MAKES } from "@/lib/scraper/fleet-marque-constants";
+import { apiFetch } from "@/lib/utils";
 
 type Term = {
   id: string;
@@ -46,7 +47,7 @@ export function TermsTable({ refreshTrigger }: TermsTableProps) {
       if (make) params.set("make", make);
       if (minDiscount) params.set("minDiscount", minDiscount);
 
-      const response = await fetch(`/api/fleet-marque/terms?${params}`);
+      const response = await apiFetch(`/api/fleet-marque/terms?${params}`);
       const data = await response.json();
       setTerms(data.terms || []);
       setTotal(data.total || 0);

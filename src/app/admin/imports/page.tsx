@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { cn } from "@/lib/utils";
+import { cn, getApiBaseUrl } from "@/lib/utils";
 import {
   Upload,
   RefreshCw,
@@ -21,6 +21,30 @@ import {
   Plus,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
+
+// Chunked import settings
+const CHUNK_SIZE_ROWS = 20000; // 20k rows per chunk
+const LARGE_FILE_THRESHOLD = 5 * 1024 * 1024; // 5MB
+
+// Split CSV content into chunks, preserving header in each chunk
+function splitCsvIntoChunks(csvContent: string, chunkSizeRows: number = CHUNK_SIZE_ROWS): { chunks: string[]; headerRow: string } {
+  const lines = csvContent.split("\n");
+  const headerRow = lines[0];
+  const dataRows = lines.slice(1).filter(line => line.trim().length > 0);
+
+  const chunks: string[] = [];
+  for (let i = 0; i < dataRows.length; i += chunkSizeRows) {
+    const chunkRows = dataRows.slice(i, i + chunkSizeRows);
+    // First chunk includes header, subsequent chunks don't (header sent separately)
+    if (i === 0) {
+      chunks.push(headerRow + "\n" + chunkRows.join("\n"));
+    } else {
+      chunks.push(chunkRows.join("\n"));
+    }
+  }
+
+  return { chunks, headerRow };
+}
 
 // Types
 interface Import {
@@ -376,42 +400,110 @@ function ImportWizard({ isOpen, onClose, onImportComplete }: {
 
         // Process each contract type for this file
         for (const contractType of contractTypes) {
-          // Use splitlease-api on Railway for imports
-          const apiBase = process.env.NEXT_PUBLIC_API_URL || "https://splitfin-broker-production.up.railway.app";
-          const queryParams = new URLSearchParams({
-            fileName: detectedFile.file.name,
-            contractType,
-            providerCode: provider,
-          });
+          const apiBase = getApiBaseUrl();
+          const isLargeFile = fileContent.length > LARGE_FILE_THRESHOLD;
 
-          const response = await fetch(`${apiBase}/api/admin/ratebooks/import-stream?${queryParams}`, {
-            method: "POST",
-            headers: { "Content-Type": "text/plain" },
-            body: fileContent,
-          });
+          if (isLargeFile && !isXLSX) {
+            // Use chunked import for large CSV files
+            const { chunks, headerRow } = splitCsvIntoChunks(fileContent);
+            console.log(`Large file detected: ${detectedFile.file.name} - splitting into ${chunks.length} chunks`);
 
-          const data = await response.json();
+            let totalRows = 0;
+            let successRows = 0;
+            let errorRows = 0;
+            let uniqueCapCodes = 0;
+            const allErrors: string[] = [];
+            let allSuccess = true;
 
-          if (!response.ok) {
+            for (let chunkIdx = 0; chunkIdx < chunks.length; chunkIdx++) {
+              const chunk = chunks[chunkIdx];
+              const queryParams = new URLSearchParams({
+                fileName: detectedFile.file.name,
+                contractType,
+                providerCode: provider,
+                chunkIndex: chunkIdx.toString(),
+                totalChunks: chunks.length.toString(),
+                ...(chunkIdx > 0 && { headerRow: encodeURIComponent(headerRow) }),
+              });
+
+              try {
+                const response = await fetch(`${apiBase}/api/admin/ratebooks/import-chunked?${queryParams}`, {
+                  method: "POST",
+                  headers: { "Content-Type": "text/plain" },
+                  body: chunk,
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                  allSuccess = false;
+                  allErrors.push(`Chunk ${chunkIdx + 1}: ${data.error || "Failed"}`);
+                } else {
+                  totalRows += data.totalRows || 0;
+                  successRows += data.successRows || 0;
+                  errorRows += data.errorRows || 0;
+                  uniqueCapCodes += data.uniqueCapCodes || 0;
+                  if (data.errors?.length) {
+                    allErrors.push(...data.errors.slice(0, 5));
+                  }
+                }
+
+                // Update progress within this file
+                const chunkProgress = ((chunkIdx + 1) / chunks.length) * 100;
+                const fileProgress = (i / totalFiles) * 100;
+                setImportProgress(Math.round(fileProgress + (chunkProgress / totalFiles)));
+              } catch (err) {
+                allSuccess = false;
+                allErrors.push(`Chunk ${chunkIdx + 1}: ${err instanceof Error ? err.message : "Network error"}`);
+              }
+            }
+
             results.push({
               fileName: `${detectedFile.file.name} (${contractType})`,
-              success: false,
-              totalRows: 0,
-              successRows: 0,
-              errorRows: 0,
-              uniqueCapCodes: 0,
-              errors: [data.error || "Import failed"],
+              success: allSuccess && successRows > 0,
+              totalRows,
+              successRows,
+              errorRows,
+              uniqueCapCodes,
+              errors: allErrors.slice(0, 10),
             });
           } else {
-            results.push({
-              fileName: `${detectedFile.file.name} (${contractType})`,
-              success: data.success,
-              totalRows: data.stats?.totalRows || 0,
-              successRows: data.stats?.successRows || 0,
-              errorRows: data.stats?.errorRows || 0,
-              uniqueCapCodes: data.stats?.uniqueCapCodes || 0,
-              errors: data.errors || [],
+            // Standard import for smaller files
+            const queryParams = new URLSearchParams({
+              fileName: detectedFile.file.name,
+              contractType,
+              providerCode: provider,
             });
+
+            const response = await fetch(`${apiBase}/api/admin/ratebooks/import-stream?${queryParams}`, {
+              method: "POST",
+              headers: { "Content-Type": "text/plain" },
+              body: fileContent,
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+              results.push({
+                fileName: `${detectedFile.file.name} (${contractType})`,
+                success: false,
+                totalRows: 0,
+                successRows: 0,
+                errorRows: 0,
+                uniqueCapCodes: 0,
+                errors: [data.error || data.errors?.[0] || "Import failed"],
+              });
+            } else {
+              results.push({
+                fileName: `${detectedFile.file.name} (${contractType})`,
+                success: data.success,
+                totalRows: data.totalRows || data.stats?.totalRows || 0,
+                successRows: data.successRows || data.stats?.successRows || 0,
+                errorRows: data.errorRows || data.stats?.errorRows || 0,
+                uniqueCapCodes: data.uniqueCapCodes || data.stats?.uniqueCapCodes || 0,
+                errors: data.errors || [],
+              });
+            }
           }
         }
       } catch (error) {

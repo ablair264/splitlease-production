@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { ChevronLeft, ChevronRight, Trash2, Download, Car, Wrench } from "lucide-react";
+import { apiFetch } from "@/lib/utils";
 
 type Quote = {
   id: string;
@@ -42,7 +43,7 @@ export function QuotesTable({ refreshTrigger }: QuotesTableProps) {
       });
       if (selectedMake) params.append("make", selectedMake);
 
-      const response = await fetch(`/api/lex-autolease/quotes?${params}`);
+      const response = await apiFetch(`/api/lex-autolease/quotes?${params}`);
       const data = await response.json();
       setQuotes(data.quotes || []);
       setMakes(data.makes || []);
@@ -62,7 +63,7 @@ export function QuotesTable({ refreshTrigger }: QuotesTableProps) {
     if (!confirm("Delete this quote?")) return;
     setDeleting(id);
     try {
-      await fetch("/api/lex-autolease/quotes", {
+      await apiFetch("/api/lex-autolease/quotes", {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ quoteId: id })

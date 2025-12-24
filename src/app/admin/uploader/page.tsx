@@ -11,6 +11,7 @@ import {
   AlertCircle,
   RefreshCw,
 } from "lucide-react";
+import { getApiBaseUrl } from "@/lib/utils";
 
 type UploadTab = "venus" | "ratebook";
 
@@ -117,7 +118,8 @@ export default function UploaderPage() {
       const formData = new FormData();
       formData.append("file", venusSelectedFile);
 
-      const response = await fetch("/api/admin/uploader/venus", {
+      const apiBase = getApiBaseUrl();
+      const response = await fetch(`${apiBase}/api/admin/uploader/venus`, {
         method: "POST",
         body: formData,
       });
@@ -180,15 +182,18 @@ export default function UploaderPage() {
     try {
       const csvContent = await ratebookFile.text();
 
-      const res = await fetch("/api/admin/ratebooks", {
+      // Use splitlease-api on Railway for imports
+      const apiBase = getApiBaseUrl();
+      const queryParams = new URLSearchParams({
+        fileName: ratebookFile.name,
+        contractType: ratebookContractType,
+        providerCode: ratebookProvider,
+      });
+
+      const res = await fetch(`${apiBase}/api/admin/ratebooks/import-stream?${queryParams}`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          providerCode: ratebookProvider,
-          contractType: ratebookContractType,
-          fileName: ratebookFile.name,
-          csvContent,
-        }),
+        headers: { "Content-Type": "text/plain" },
+        body: csvContent,
       });
 
       const data = await res.json();

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { Search, Play, Loader2, CheckCircle2, XCircle, User, LogOut } from "lucide-react";
+import { apiFetch } from "@/lib/utils";
 
 type VehicleRaw = {
   id: string;
@@ -100,7 +101,7 @@ export function QuoteRunner({ onQuotesComplete }: { onQuotesComplete?: () => voi
   // Check session status
   const checkSession = async () => {
     try {
-      const response = await fetch("/api/lex-autolease/session");
+      const response = await apiFetch("/api/lex-autolease/session");
       const data = await response.json();
       setSession(data);
     } catch {
@@ -113,7 +114,7 @@ export function QuoteRunner({ onQuotesComplete }: { onQuotesComplete?: () => voi
   // Load vehicles
   const loadVehicles = async () => {
     try {
-      const response = await fetch("/api/lex-autolease/vehicles?hasLexCodes=true");
+      const response = await apiFetch("/api/lex-autolease/vehicles?hasLexCodes=true");
       if (response.ok) {
         const data = await response.json();
         const transformed: Vehicle[] = (data.vehicles || []).map((v: VehicleRaw) => ({
@@ -148,7 +149,7 @@ export function QuoteRunner({ onQuotesComplete }: { onQuotesComplete?: () => voi
     setLoginError(null);
 
     try {
-      const response = await fetch("/api/lex-autolease/login", {
+      const response = await apiFetch("/api/lex-autolease/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
@@ -171,7 +172,7 @@ export function QuoteRunner({ onQuotesComplete }: { onQuotesComplete?: () => voi
 
   // Logout handler
   const handleLogout = async () => {
-    await fetch("/api/lex-autolease/session", { method: "DELETE" });
+    await apiFetch("/api/lex-autolease/session", { method: "DELETE" });
     checkSession();
   };
 
@@ -233,7 +234,7 @@ export function QuoteRunner({ onQuotesComplete }: { onQuotesComplete?: () => voi
         vehicleId: v.id,
       }));
 
-      const response = await fetch("/api/lex-autolease/run-quotes", {
+      const response = await apiFetch("/api/lex-autolease/run-quotes", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ vehicles: vehiclesToQuote, term, mileage, paymentPlan, contractType }),

@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { Play, CheckCircle, Filter, Loader2 } from "lucide-react";
 import { ExportProgressModal } from "./export-progress-modal";
+import { apiFetch } from "@/lib/utils";
 
 type ExportConfig = {
   contractTerm: number;
@@ -54,7 +55,7 @@ export function OgilvieExportForm({ sessionValid, onExportComplete }: ExportForm
   const loadManufacturers = async () => {
     setLoadingManufacturers(true);
     try {
-      const response = await fetch("/api/ogilvie/manufacturers");
+      const response = await apiFetch("/api/ogilvie/manufacturers");
       const data = await response.json();
       if (data.manufacturers) {
         setManufacturers(data.manufacturers);
