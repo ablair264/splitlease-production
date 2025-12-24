@@ -19,6 +19,7 @@ const CONTRACT_TYPES = [
 const PROVIDERS = [
   { value: "lex", label: "Lex Autolease" },
   { value: "ogilvie", label: "Ogilvie Fleet" },
+  { value: "ald", label: "ALD Automotive" },
 ];
 
 export function RatebookUploadModal({ isOpen, onClose, onSuccess }: RatebookUploadModalProps) {
@@ -62,27 +63,34 @@ export function RatebookUploadModal({ isOpen, onClose, onSuccess }: RatebookUplo
     try {
       const csvContent = await file.text();
 
-      const res = await fetch("/api/admin/ratebooks", {
+      // Use splitlease-api for imports (supports large files via streaming)
+      const apiBase = process.env.NEXT_PUBLIC_API_URL || "https://splitlease-api-production.up.railway.app";
+      const queryParams = new URLSearchParams({
+        fileName: file.name,
+        contractType,
+        providerCode: provider,
+      });
+
+      const res = await fetch(`${apiBase}/api/admin/ratebooks/import-stream?${queryParams}`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          providerCode: provider,
-          contractType,
-          fileName: file.name,
-          csvContent,
-        }),
+        headers: { "Content-Type": "text/plain" },
+        body: csvContent,
       });
 
       const data = await res.json();
 
       if (!res.ok) {
-        setError(data.error || "Upload failed");
+        setError(data.error || data.errors?.[0] || "Upload failed");
         return;
       }
 
       setResult({
         success: data.success,
-        stats: data.stats,
+        stats: {
+          totalRows: data.totalRows,
+          successRows: data.successRows,
+          errorRows: data.errorRows,
+        },
         errors: data.errors,
       });
 
