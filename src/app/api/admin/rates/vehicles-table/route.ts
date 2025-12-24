@@ -43,6 +43,7 @@ export async function GET(request: NextRequest) {
     const ageMax = searchParams.get("ageMax") ? parseInt(searchParams.get("ageMax")!) : null;
     const specialOfferOnly = searchParams.get("specialOffer") === "true";
     const enabledOnly = searchParams.get("enabledOnly") !== "false"; // Default to enabled only
+    const vehicleCategory = searchParams.get("vehicleCategory") || "cars"; // cars, vans, or all
 
     // Sort
     const sortBy = searchParams.get("sortBy") || "bestScore";
@@ -69,6 +70,14 @@ export async function GET(request: NextRequest) {
     if (priceMax !== null) {
       conditions.push(lte(providerRates.totalRental, priceMax));
     }
+
+    // Vehicle category filter (cars vs vans)
+    if (vehicleCategory === "cars") {
+      conditions.push(eq(providerRates.isCommercial, false));
+    } else if (vehicleCategory === "vans") {
+      conditions.push(eq(providerRates.isCommercial, true));
+    }
+    // "all" doesn't add any condition
 
     if (search) {
       const searchCondition = or(
@@ -104,17 +113,26 @@ export async function GET(request: NextRequest) {
           ORDER BY pr2.total_rental ASC
           LIMIT 1
         )`.as("bestProviderCode"),
-        // Get score breakdown from the rate with the best score
+        // Get score breakdown from the rate with the best PRICE (to match the displayed price)
         bestScoreBreakdown: sql<string>`(
           SELECT pr2.score_breakdown::text
           FROM provider_rates pr2
           INNER JOIN ratebook_imports ri2 ON pr2.import_id = ri2.id
           WHERE pr2.vehicle_id = ${providerRates.vehicleId}
           AND ri2.is_latest = true
-          AND pr2.score IS NOT NULL
-          ORDER BY pr2.score DESC
+          ORDER BY pr2.total_rental ASC
           LIMIT 1
         )`.as("bestScoreBreakdown"),
+        // Get score from the rate with the best price
+        bestPriceScore: sql<number>`(
+          SELECT pr2.score
+          FROM provider_rates pr2
+          INNER JOIN ratebook_imports ri2 ON pr2.import_id = ri2.id
+          WHERE pr2.vehicle_id = ${providerRates.vehicleId}
+          AND ri2.is_latest = true
+          ORDER BY pr2.total_rental ASC
+          LIMIT 1
+        )`.as("bestPriceScore"),
         providerCount: sql<number>`COUNT(DISTINCT ${providerRates.providerCode})`.as("providerCount"),
         providers: sql<string>`STRING_AGG(DISTINCT ${providerRates.providerCode}, ',')`.as("providers"),
         latestRatebookDate: sql<Date>`MAX(COALESCE(${ratebookImports.ratebookDate}, ${ratebookImports.createdAt}))`.as("latestRatebookDate"),
@@ -155,8 +173,8 @@ export async function GET(request: NextRequest) {
       .map((v) => {
         const p11dValue = v.p11d ? Number(v.p11d) : null;
         const bestPrice = Number(v.bestPrice);
-        // Use stored score from database
-        const score = v.bestScore ? Number(v.bestScore) : 50;
+        // Use score from the best price rate (not best score rate)
+        const score = (v as any).bestPriceScore ? Number((v as any).bestPriceScore) : (v.bestScore ? Number(v.bestScore) : 50);
         const integrityDays = calculateIntegrityDays(v.latestRatebookDate);
 
         const status = statusMap.get(v.vehicleId || "") || {

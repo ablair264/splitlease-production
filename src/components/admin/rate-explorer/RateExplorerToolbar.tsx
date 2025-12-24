@@ -11,7 +11,7 @@ import {
   Eye,
   MoreVertical,
 } from "lucide-react";
-import type { TableFilters, FilterOptions } from "./types";
+import type { TableFilters, FilterOptions, VehicleCategory } from "./types";
 import type { VisibilityState, ColumnOrderState } from "@tanstack/react-table";
 import { FilterBuilder } from "./FilterBuilder";
 import { ViewManager } from "./ViewManager";
@@ -61,6 +61,7 @@ export function RateExplorerToolbar({
     filters.ageMax !== null,
     filters.specialOfferOnly,
     !filters.enabledOnly,
+    filters.vehicleCategory !== "cars", // Count if not default
   ].filter(Boolean).length;
 
   const handleSearchChange = (value: string) => {
@@ -128,6 +129,23 @@ export function RateExplorerToolbar({
               </span>
             )}
           </button>
+
+          {/* Vehicle category toggle */}
+          <div className="flex items-center rounded-lg bg-white/5 border border-white/10 overflow-hidden">
+            {(["cars", "vans", "all"] as VehicleCategory[]).map((cat) => (
+              <button
+                key={cat}
+                onClick={() => onFiltersChange({ ...filters, vehicleCategory: cat })}
+                className={`px-3 py-2 text-xs font-medium transition-colors ${
+                  filters.vehicleCategory === cat
+                    ? "bg-cyan-500/20 text-cyan-400"
+                    : "text-white/50 hover:text-white/70"
+                }`}
+              >
+                {cat === "all" ? "All" : cat.charAt(0).toUpperCase() + cat.slice(1)}
+              </button>
+            ))}
+          </div>
 
           {/* Maintenance toggle */}
           <div className="flex items-center rounded-lg bg-white/5 border border-white/10 overflow-hidden">

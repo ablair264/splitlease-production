@@ -250,13 +250,30 @@ export function RateMatrixExpansion({ vehicleId, showMaintenance }: RateMatrixEx
       }
     });
 
-    return { termProfiles, providers, matrix, bestPrices };
+    // Find the OVERALL best price across all cells (actual prices only)
+    let overallBestPrice: number | null = null;
+    let overallBestKey: string | null = null;
+    let overallBestProvider: string | null = null;
+    termProfiles.forEach((tp) => {
+      providers.forEach((provider) => {
+        const cell = matrix[provider][tp.key];
+        if (cell.price !== null && !cell.isEstimate) {
+          if (overallBestPrice === null || cell.price < overallBestPrice) {
+            overallBestPrice = cell.price;
+            overallBestKey = tp.key;
+            overallBestProvider = provider;
+          }
+        }
+      });
+    });
+
+    return { termProfiles, providers, matrix, bestPrices, overallBestPrice, overallBestKey, overallBestProvider };
   };
 
   const renderMatrix = (rates: Rate[], title: string, isFirst: boolean = false) => {
     if (rates.length === 0) return null;
 
-    const { termProfiles, providers, matrix, bestPrices } = groupRates(rates);
+    const { termProfiles, providers, matrix, bestPrices, overallBestKey, overallBestProvider } = groupRates(rates);
 
     if (termProfiles.length === 0) {
       return (
@@ -353,6 +370,7 @@ export function RateMatrixExpansion({ vehicleId, showMaintenance }: RateMatrixEx
                       const price = cell.price;
                       const isEstimate = cell.isEstimate;
                       const isBest = price !== null && !isEstimate && price === bestPrices[tp.key];
+                      const isOverallBest = tp.key === overallBestKey && provider === overallBestProvider;
                       const isFirstInGroup = idx === 0 || termProfiles[idx - 1].term !== tp.term;
 
                       return (
@@ -361,16 +379,24 @@ export function RateMatrixExpansion({ vehicleId, showMaintenance }: RateMatrixEx
                           className={`px-1 py-1 text-center text-xs ${
                             isFirstInGroup ? "border-l border-white/10" : ""
                           } ${
-                            isEstimate
-                              ? "text-amber-400/70 italic font-normal"
-                              : isBest
-                                ? "text-emerald-400 font-semibold"
-                                : price
-                                  ? "text-white/80 font-semibold"
-                                  : "text-white/20"
+                            isOverallBest
+                              ? "text-cyan-400 font-bold"
+                              : isEstimate
+                                ? "text-amber-400/70 italic font-normal"
+                                : isBest
+                                  ? "text-emerald-400 font-semibold"
+                                  : price
+                                    ? "text-white/80 font-semibold"
+                                    : "text-white/20"
                           }`}
-                          style={isBest ? { background: "rgba(16, 185, 129, 0.08)" } : {}}
-                          title={isEstimate ? "Estimated price" : undefined}
+                          style={
+                            isOverallBest
+                              ? { background: "rgba(121, 213, 233, 0.15)", boxShadow: "inset 0 0 0 2px rgba(121, 213, 233, 0.5)" }
+                              : isBest
+                                ? { background: "rgba(16, 185, 129, 0.08)" }
+                                : {}
+                          }
+                          title={isOverallBest ? "Best price (shown in badge)" : isEstimate ? "Estimated price" : undefined}
                         >
                           {price !== null ? `£${price}` : "-"}
                         </td>

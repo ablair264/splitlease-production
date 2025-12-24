@@ -17,6 +17,7 @@ const DEFAULT_FILTERS: TableFilters = {
   ageMax: null,
   specialOfferOnly: false,
   enabledOnly: true,
+  vehicleCategory: "cars",
 };
 
 const DEFAULT_SORT: SortState = {
@@ -60,6 +61,7 @@ export default function RateExplorerPage() {
     if (filters.ageMax !== null) params.set("ageMax", filters.ageMax.toString());
     if (filters.specialOfferOnly) params.set("specialOffer", "true");
     params.set("enabledOnly", filters.enabledOnly.toString());
+    if (filters.vehicleCategory !== "all") params.set("vehicleCategory", filters.vehicleCategory);
 
     return params.toString();
   }, [page, pageSize, sort, filters]);

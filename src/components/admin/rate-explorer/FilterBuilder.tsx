@@ -30,6 +30,7 @@ export function FilterBuilder({
       ageMax: null,
       specialOfferOnly: false,
       enabledOnly: true,
+      vehicleCategory: "cars",
     });
   };
 

@@ -49,6 +49,8 @@ export interface Pagination {
   hasMore: boolean;
 }
 
+export type VehicleCategory = "cars" | "vans" | "all";
+
 export interface TableFilters {
   search: string;
   manufacturers: string[];
@@ -60,6 +62,7 @@ export interface TableFilters {
   ageMax: number | null;
   specialOfferOnly: boolean;
   enabledOnly: boolean;
+  vehicleCategory: VehicleCategory;
 }
 
 export interface SortState {
