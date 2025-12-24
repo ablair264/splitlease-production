@@ -64,7 +64,7 @@ export function RatebookUploadModal({ isOpen, onClose, onSuccess }: RatebookUplo
       const csvContent = await file.text();
 
       // Use splitlease-api for imports (supports large files via streaming)
-      const apiBase = process.env.NEXT_PUBLIC_API_URL || "https://splitlease-api-production.up.railway.app";
+      const apiBase = process.env.NEXT_PUBLIC_API_URL || "https://splitfin-broker-production.up.railway.app";
       const queryParams = new URLSearchParams({
         fileName: file.name,
         contractType,
