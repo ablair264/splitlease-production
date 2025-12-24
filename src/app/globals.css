@@ -1,0 +1,227 @@
+@import "tailwindcss";
+
+/* Splitfin Dark Theme Configuration */
+@theme {
+  /* Border radius */
+  --radius: 0.75rem;
+  --radius-lg: var(--radius);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-sm: calc(var(--radius) - 4px);
+
+  /* Primary Colors */
+  --color-primary: #1a1f2a;
+  --color-primary-hover: #34495e;
+  --color-primary-dark: #1a1f2a;
+  --color-accent: #79d5e9;
+  --color-accent-teal: #4daeac;
+  --color-accent-cta: #fbbf24;
+  --color-focus: #79d5e9;
+
+  /* Status Colors */
+  --color-success: #4d9869;
+  --color-warning: #f8d824;
+  --color-error: #dd4444;
+  --color-info: #5171a6;
+
+  /* Backgrounds */
+  --color-bg-primary: #0f1419;
+  --color-bg-secondary: #1a1f2a;
+  --color-bg-tertiary: #252b35;
+  --color-bg-hover: rgba(255, 255, 255, 0.05);
+  --color-bg-active: rgba(121, 213, 233, 0.1);
+
+  /* Text Colors */
+  --color-text-primary: #ffffff;
+  --color-text-secondary: rgba(255, 255, 255, 0.7);
+  --color-text-tertiary: rgba(255, 255, 255, 0.5);
+  --color-text-muted: rgba(255, 255, 255, 0.4);
+  --color-text-disabled: rgba(255, 255, 255, 0.3);
+
+  /* Borders */
+  --color-border-primary: rgba(255, 255, 255, 0.1);
+  --color-border-secondary: rgba(255, 255, 255, 0.05);
+
+  /* Shadows */
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.3);
+  --shadow-xl: 0 25px 50px rgba(0, 0, 0, 0.5);
+
+  /* Score Colors */
+  --color-score-excellent: #4d9869;
+  --color-score-good: #79d5e9;
+  --color-score-average: #f8d824;
+  --color-score-poor: #dd4444;
+
+  /* Sidebar */
+  --color-sidebar-bg: #161c24;
+  --color-sidebar-border: rgba(255, 255, 255, 0.1);
+}
+
+/* Content area gradient - exact from mockup */
+.admin-content-gradient {
+  background: linear-gradient(225deg, rgba(37,75,75,0.98) 0%, #2c3e50 0%, #36575a 46.94%);
+}
+
+/* Alternative teal gradient for cards */
+.admin-card-gradient {
+  background: linear-gradient(135deg, #1a2f38 0%, #1e3a3f 50%, #1a2f38 100%);
+}
+
+/* Score color utilities */
+.score-excellent { color: var(--color-score-excellent); }
+.score-good { color: var(--color-score-good); }
+.score-average { color: var(--color-score-average); }
+.score-poor { color: var(--color-score-poor); }
+
+/* Variant-first vehicle display pattern */
+.vehicle-variant-primary {
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+.vehicle-make-model-secondary {
+  font-size: 0.875rem;
+  color: var(--color-text-secondary);
+}
+
+/* CSS Variables for shadcn-style theming */
+:root {
+  /* Splitfin Dark Theme - HSL Values */
+  --background: 216 28% 7%;
+  --foreground: 0 0% 100%;
+  --card: 220 24% 13%;
+  --card-foreground: 0 0% 100%;
+  --popover: 220 24% 13%;
+  --popover-foreground: 0 0% 100%;
+
+  /* Accent: Teal/Cyan #79d5e9 */
+  --primary: 191 70% 69%;
+  --primary-foreground: 216 28% 7%;
+
+  --secondary: 220 24% 16%;
+  --secondary-foreground: 0 0% 100%;
+  --muted: 220 24% 16%;
+  --muted-foreground: 220 13% 69%;
+  --accent: 191 70% 69%;
+  --accent-foreground: 216 28% 7%;
+  --destructive: 0 84% 60%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 220 13% 20%;
+  --input: 220 24% 16%;
+  --ring: 191 70% 69%;
+
+  /* Sidebar gradient for linear-gradient usage */
+  --sidebar-gradient: linear-gradient(135deg, #34495d, #2c3e50, #1a1f2a);
+}
+
+/* Base styles */
+* {
+  border-color: hsl(var(--border));
+}
+
+body {
+  background-color: hsl(var(--background));
+  color: hsl(var(--foreground));
+  font-family: var(--font-mona-sans), "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+/* Login Page Animations */
+@keyframes gradientShift {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+@keyframes gradientPulse {
+  0%, 100% {
+    transform: scale(1) rotate(0deg);
+    opacity: 0.8;
+  }
+  50% {
+    transform: scale(1.1) rotate(180deg);
+    opacity: 1;
+  }
+}
+
+@keyframes gentleFloat {
+  0%, 100% {
+    transform: translate(0, 0) scale(1);
+    opacity: 0.4;
+  }
+  33% {
+    transform: translate(30px, -20px) scale(1.05);
+    opacity: 0.6;
+  }
+  66% {
+    transform: translate(-20px, 20px) scale(0.95);
+    opacity: 0.3;
+  }
+}
+
+@keyframes errorSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Reduced motion preference */
+@media (prefers-reduced-motion: reduce) {
+  .login-gradient-bg::before,
+  .login-gradient-bg::after,
+  .floating-accent {
+    animation: none;
+  }
+}
+
+/* Custom Scrollbar Styling for Admin */
+.admin-scrollbar::-webkit-scrollbar,
+[data-admin-theme] ::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.admin-scrollbar::-webkit-scrollbar-track,
+[data-admin-theme] ::-webkit-scrollbar-track {
+  background: rgba(26, 31, 42, 0.4);
+  border-radius: 4px;
+}
+
+.admin-scrollbar::-webkit-scrollbar-thumb,
+[data-admin-theme] ::-webkit-scrollbar-thumb {
+  background: rgba(121, 213, 233, 0.3);
+  border-radius: 4px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+.admin-scrollbar::-webkit-scrollbar-thumb:hover,
+[data-admin-theme] ::-webkit-scrollbar-thumb:hover {
+  background: rgba(121, 213, 233, 0.5);
+  background-clip: padding-box;
+}
+
+.admin-scrollbar::-webkit-scrollbar-corner,
+[data-admin-theme] ::-webkit-scrollbar-corner {
+  background: rgba(26, 31, 42, 0.4);
+}
+
+/* Firefox scrollbar styling */
+.admin-scrollbar,
+[data-admin-theme] * {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(121, 213, 233, 0.3) rgba(26, 31, 42, 0.4);
+}
+
+/* Sidebar width classes */
+.sidebar-expanded {
+  width: 16rem;
+}
+
+.sidebar-collapsed {
+  width: 5rem;
+}

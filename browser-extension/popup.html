@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      width: 320px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: linear-gradient(135deg, #1a1f2a 0%, #141821 100%);
+      color: white;
+      padding: 16px;
+    }
+
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 16px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .logo {
+      width: 40px;
+      height: 40px;
+      background: linear-gradient(135deg, rgba(30, 141, 141, 0.3) 0%, rgba(121, 213, 233, 0.2) 100%);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid rgba(121, 213, 233, 0.3);
+    }
+
+    .logo svg {
+      width: 24px;
+      height: 24px;
+      color: #79D5E9;
+    }
+
+    .title {
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    .subtitle {
+      font-size: 11px;
+      color: rgba(255, 255, 255, 0.5);
+    }
+
+    .status-card {
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 10px;
+      padding: 12px;
+      margin-bottom: 12px;
+    }
+
+    .status-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 12px;
+    }
+
+    .status-row + .status-row {
+      margin-top: 8px;
+    }
+
+    .status-label {
+      color: rgba(255, 255, 255, 0.5);
+    }
+
+    .status-value {
+      font-weight: 500;
+    }
+
+    .status-value.success {
+      color: #10B981;
+    }
+
+    .status-value.warning {
+      color: #F59E0B;
+    }
+
+    .status-value.error {
+      color: #EF4444;
+    }
+
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      display: inline-block;
+      margin-right: 6px;
+    }
+
+    .dot.success {
+      background: #10B981;
+    }
+
+    .dot.warning {
+      background: #F59E0B;
+    }
+
+    .dot.error {
+      background: #EF4444;
+    }
+
+    .input-group {
+      margin-bottom: 12px;
+    }
+
+    .input-label {
+      font-size: 11px;
+      color: rgba(255, 255, 255, 0.5);
+      margin-bottom: 4px;
+    }
+
+    input {
+      width: 100%;
+      padding: 10px 12px;
+      border-radius: 8px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      background: rgba(0, 0, 0, 0.3);
+      color: white;
+      font-size: 12px;
+    }
+
+    input:focus {
+      outline: none;
+      border-color: rgba(121, 213, 233, 0.5);
+    }
+
+    input::placeholder {
+      color: rgba(255, 255, 255, 0.3);
+    }
+
+    button {
+      width: 100%;
+      padding: 12px;
+      border-radius: 8px;
+      border: none;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, #1e8d8d 0%, #1a7a7a 100%);
+      color: white;
+    }
+
+    .btn-primary:hover:not(:disabled) {
+      background: linear-gradient(135deg, #22a0a0 0%, #1e8d8d 100%);
+    }
+
+    .message {
+      font-size: 11px;
+      padding: 10px;
+      border-radius: 8px;
+      margin-top: 12px;
+      display: none;
+    }
+
+    .message.success {
+      background: rgba(16, 185, 129, 0.1);
+      color: #10B981;
+      border: 1px solid rgba(16, 185, 129, 0.2);
+      display: block;
+    }
+
+    .message.error {
+      background: rgba(239, 68, 68, 0.1);
+      color: #EF4444;
+      border: 1px solid rgba(239, 68, 68, 0.2);
+      display: block;
+    }
+
+    .spinner {
+      width: 14px;
+      height: 14px;
+      border: 2px solid rgba(255, 255, 255, 0.3);
+      border-top-color: white;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .footer {
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid rgba(255, 255, 255, 0.1);
+      font-size: 10px;
+      color: rgba(255, 255, 255, 0.3);
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="logo">
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+      </svg>
+    </div>
+    <div>
+      <div class="title">Lex Session Capture</div>
+      <div class="subtitle">Broker Platform</div>
+    </div>
+  </div>
+
+  <div class="status-card">
+    <div class="status-row">
+      <span class="status-label">Lex Portal</span>
+      <span class="status-value" id="portalStatus">
+        <span class="dot warning"></span>Checking...
+      </span>
+    </div>
+    <div class="status-row">
+      <span class="status-label">Cookies</span>
+      <span class="status-value" id="cookieStatus">
+        <span class="dot warning"></span>Checking...
+      </span>
+    </div>
+    <div class="status-row">
+      <span class="status-label">CSRF Token</span>
+      <span class="status-value" id="csrfStatus">
+        <span class="dot warning"></span>Checking...
+      </span>
+    </div>
+  </div>
+
+  <div class="input-group">
+    <div class="input-label">Broker Platform URL</div>
+    <input type="text" id="apiUrl" placeholder="http://localhost:3000" value="http://localhost:3000">
+  </div>
+
+  <button class="btn-primary" id="captureBtn" disabled>
+    <span id="btnText">Capture Session</span>
+    <div class="spinner" id="btnSpinner" style="display: none;"></div>
+  </button>
+
+  <div class="message" id="message"></div>
+
+  <div class="footer">
+    Log in to Lex Autolease portal, then click Capture
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

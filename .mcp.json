@@ -1,0 +1,21 @@
+{
+  "mcpServers": {
+    "cloudflare-workers": {
+      "type": "sse",
+      "url": "https://bindings.mcp.cloudflare.com/sse"
+    },
+    "neon": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@neondatabase/mcp-server-neon",
+        "start",
+        "napi_2c9jyp3oyfdhtn1jozarna410wkuh2ujj46vpf5pd3qi0hjll4c186iyqhxl39p2"
+      ]
+    },
+    "sequential-thinking": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-sequential-thinking"]
+    }
+  }
+}
