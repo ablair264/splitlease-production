@@ -107,10 +107,11 @@ async function processQuoteQueue() {
       await sleep(500);
 
     } catch (error) {
-      console.error(`Quote failed for ${item.manufacturer} ${item.model}:`, error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error(`Quote failed for ${item.manufacturer} ${item.model}:`, errorMessage);
 
       // Update status to error
-      await updateQueueItem(item.vehicleId, 'error', null, error.message);
+      await updateQueueItem(item.vehicleId, 'error', null, errorMessage);
       errors++;
     }
   }
