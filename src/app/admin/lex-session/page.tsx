@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { CheckCircle2, AlertCircle, Bookmark, ExternalLink, RefreshCw } from "lucide-react";
+import { CheckCircle2, AlertCircle, Bookmark, ExternalLink, RefreshCw, Copy, Check } from "lucide-react";
 import { generateBookmarklet } from "@/lib/lex/constants";
 
 export default function LexSessionPage() {
@@ -11,12 +11,19 @@ export default function LexSessionPage() {
     username?: string;
   } | null>(null);
   const [bookmarkletUrl, setBookmarkletUrl] = useState("");
+  const [copied, setCopied] = useState(false);
 
   // Generate bookmarklet URL on client side
   useEffect(() => {
     const apiUrl = window.location.origin;
     setBookmarkletUrl(generateBookmarklet(apiUrl));
   }, []);
+
+  const copyBookmarklet = async () => {
+    await navigator.clipboard.writeText(bookmarkletUrl);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
 
   // Check current session status
   const checkSession = async () => {
@@ -120,32 +127,36 @@ export default function LexSessionPage() {
         <h2 className="font-semibold mb-4 text-lg text-white">📌 One-Click Setup</h2>
 
         <div className="space-y-4">
-          {/* Step 1: Drag bookmarklet */}
+          {/* Step 1: Create bookmarklet */}
           <div className="flex gap-4">
             <div className="flex-shrink-0 w-8 h-8 rounded-full bg-[#79d5e9]/20 flex items-center justify-center text-[#79d5e9] font-bold text-sm">
               1
             </div>
             <div className="flex-1">
-              <p className="font-medium mb-2 text-white">Drag this button to your bookmarks bar:</p>
-              {bookmarkletUrl && (
-                <a
-                  href={bookmarkletUrl}
-                  onClick={(e) => e.preventDefault()}
-                  draggable="true"
+              <p className="font-medium mb-2 text-white">Create a bookmarklet:</p>
+              <div className="space-y-2">
+                <button
+                  onClick={copyBookmarklet}
                   className="inline-flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-sm transition-all"
                   style={{
-                    background: "linear-gradient(135deg, #79d5e9 0%, #5bc0d8 100%)",
+                    background: copied
+                      ? "linear-gradient(135deg, #22c55e 0%, #16a34a 100%)"
+                      : "linear-gradient(135deg, #79d5e9 0%, #5bc0d8 100%)",
                     color: "#0f1419",
-                    cursor: "grab",
                   }}
                 >
-                  <Bookmark className="h-4 w-4" />
-                  Capture Lex Session
-                </a>
-              )}
-              <p className="text-xs text-white/40 mt-2">
-                Drag the button above to your browser's bookmarks bar
-              </p>
+                  {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                  {copied ? "Copied!" : "Copy Bookmarklet Code"}
+                </button>
+                <div className="text-xs text-white/50 space-y-1">
+                  <p>After copying:</p>
+                  <ol className="list-decimal list-inside ml-2 space-y-0.5">
+                    <li>Right-click your bookmarks bar → "Add page" or "Add bookmark"</li>
+                    <li>Name it: <span className="text-[#79d5e9]">Capture Lex Session</span></li>
+                    <li>Paste the copied code as the URL</li>
+                  </ol>
+                </div>
+              </div>
             </div>
           </div>
 
