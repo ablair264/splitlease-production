@@ -25,6 +25,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     sendResponse(sessionData);
     return true;
   }
+
+  if (message.action === 'processQueue') {
+    processQuoteQueue()
+      .then(sendResponse)
+      .catch(err => sendResponse({ error: err.message }));
+    return true;
+  }
 });
 
 async function handleCapture({ csrfToken, cookies, profile }) {
@@ -47,13 +54,94 @@ async function handleCapture({ csrfToken, cookies, profile }) {
   return data;
 }
 
+// Process the quote queue
+async function processQuoteQueue() {
+  if (!sessionData) {
+    throw new Error('No session captured. Please capture session first.');
+  }
+
+  // Fetch queue from server
+  const queueResponse = await fetch(`${API_URL}/api/lex-autolease/quote-queue`);
+  const queueData = await queueResponse.json();
+
+  if (!queueData.queue || queueData.queue.length === 0) {
+    throw new Error('No quotes in queue');
+  }
+
+  const pendingItems = queueData.queue.filter(q => q.status === 'pending');
+
+  if (pendingItems.length === 0) {
+    throw new Error('No pending quotes to process');
+  }
+
+  let processed = 0;
+  let errors = 0;
+
+  for (const item of pendingItems) {
+    try {
+      // Update status to running
+      await updateQueueItem(item.vehicleId, 'running');
+
+      // Run the quote
+      const result = await runQuoteFromBrowser({
+        makeId: item.lexMakeCode,
+        modelId: item.lexModelCode,
+        variantId: item.lexVariantCode,
+        term: item.term,
+        mileage: item.mileage,
+        paymentPlan: 'spread_3_down', // Default payment plan
+        contractType: item.contractType
+      });
+
+      // Update status to complete with result
+      await updateQueueItem(item.vehicleId, 'complete', {
+        quoteId: result.quoteId,
+        monthlyRental: result.monthlyRental,
+        initialRental: result.initialRental,
+        otrp: result.otrp
+      });
+
+      processed++;
+
+      // Small delay between quotes to avoid rate limiting
+      await sleep(500);
+
+    } catch (error) {
+      console.error(`Quote failed for ${item.manufacturer} ${item.model}:`, error);
+
+      // Update status to error
+      await updateQueueItem(item.vehicleId, 'error', null, error.message);
+      errors++;
+    }
+  }
+
+  return {
+    success: true,
+    processed,
+    errors
+  };
+}
+
+// Update queue item status on server
+async function updateQueueItem(vehicleId, status, result = null, error = null) {
+  const body = { vehicleId, status };
+  if (result) body.result = result;
+  if (error) body.error = error;
+
+  await fetch(`${API_URL}/api/lex-autolease/quote-queue`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+}
+
 // Run a quote directly from the browser (bypasses IP blocking)
 async function runQuoteFromBrowser({ makeId, modelId, variantId, term, mileage, paymentPlan, contractType }) {
   if (!sessionData) {
     throw new Error('No session captured. Please capture session first.');
   }
 
-  const { csrfToken, cookies } = sessionData;
+  const { csrfToken } = sessionData;
 
   // Step 1: Get variant details
   const variantResponse = await fetch(`${LEX_URL}/services/Quote.svc/GetVariant`, {
@@ -137,6 +225,10 @@ async function runQuoteFromBrowser({ makeId, modelId, variantId, term, mileage, 
     term,
     mileage
   };
+}
+
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 function getPaymentPlanId(plan) {

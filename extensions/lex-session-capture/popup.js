@@ -4,6 +4,12 @@ document.addEventListener('DOMContentLoaded', async () => {
   const testBtn = document.getElementById('testBtn');
   const resultDiv = document.getElementById('result');
   const resultValue = document.getElementById('resultValue');
+  const queueSection = document.getElementById('queueSection');
+  const queueList = document.getElementById('queueList');
+  const queueCount = document.getElementById('queueCount');
+  const processQueueBtn = document.getElementById('processQueueBtn');
+
+  const API_URL = 'https://splitlease.netlify.app';
 
   // Check if we're on the Lex portal
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -11,6 +17,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (!tab.url?.includes('associate.lexautolease.co.uk')) {
     statusEl.className = 'status warning';
     statusEl.textContent = 'Go to associate.lexautolease.co.uk first';
+
+    // Still check queue even if not on Lex site
+    await checkQueue();
     return;
   }
 
@@ -27,6 +36,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   captureBtn.disabled = false;
+
+  // Check for pending queue
+  await checkQueue();
 
   // Handle capture
   captureBtn.addEventListener('click', async () => {
@@ -91,6 +103,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         statusEl.textContent = 'Session captured! You can run quotes now.';
         captureBtn.textContent = 'Recapture Session';
         testBtn.style.display = 'block';
+
+        // Re-check queue after session capture
+        await checkQueue();
       }
     } catch (error) {
       statusEl.className = 'status error';
@@ -139,4 +154,79 @@ document.addEventListener('DOMContentLoaded', async () => {
     testBtn.disabled = false;
     testBtn.textContent = 'Test Quote (Abarth 500e)';
   });
+
+  // Process queue button
+  processQueueBtn.addEventListener('click', async () => {
+    processQueueBtn.disabled = true;
+    processQueueBtn.textContent = 'Processing...';
+
+    try {
+      const response = await chrome.runtime.sendMessage({
+        action: 'processQueue'
+      });
+
+      if (response.error) {
+        throw new Error(response.error);
+      }
+
+      statusEl.className = 'status success';
+      statusEl.textContent = `Processed ${response.processed} quotes!`;
+
+      // Refresh queue display
+      await checkQueue();
+    } catch (error) {
+      statusEl.className = 'status error';
+      statusEl.textContent = `Queue processing failed: ${error.message}`;
+    }
+
+    processQueueBtn.disabled = false;
+    processQueueBtn.textContent = 'Process Queue';
+  });
+
+  // Check queue function
+  async function checkQueue() {
+    try {
+      const response = await fetch(`${API_URL}/api/lex-autolease/quote-queue`);
+      const data = await response.json();
+
+      if (data.queue && data.queue.length > 0) {
+        queueSection.style.display = 'block';
+
+        const pending = data.queue.filter(q => q.status === 'pending').length;
+        const complete = data.queue.filter(q => q.status === 'complete').length;
+
+        queueCount.textContent = `${pending} pending, ${complete} complete`;
+
+        // Render queue items
+        queueList.innerHTML = data.queue.map(item => `
+          <div class="queue-item">
+            <div class="vehicle">${item.manufacturer} ${item.model}</div>
+            <div class="config">${item.term}mo • ${item.mileage.toLocaleString()}mi</div>
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <span class="status-badge ${item.status}">${item.status}</span>
+              ${item.status === 'complete' && item.result ?
+                `<span class="price">£${item.result.monthlyRental?.toFixed(2)}/mo</span>` :
+                ''}
+            </div>
+          </div>
+        `).join('');
+
+        // Show process button if there are pending items and we have a session
+        const sessionData = await chrome.runtime.sendMessage({ action: 'getSessionData' });
+        if (pending > 0 && sessionData?.csrfToken) {
+          processQueueBtn.style.display = 'block';
+          processQueueBtn.textContent = `Process ${pending} Quote${pending > 1 ? 's' : ''}`;
+        } else {
+          processQueueBtn.style.display = 'none';
+        }
+      } else {
+        queueSection.style.display = 'none';
+      }
+    } catch (error) {
+      console.error('Failed to check queue:', error);
+    }
+  }
+
+  // Poll for queue updates
+  setInterval(checkQueue, 3000);
 });

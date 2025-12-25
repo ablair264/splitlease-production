@@ -9,7 +9,7 @@
       box-sizing: border-box;
     }
     body {
-      width: 300px;
+      width: 320px;
       padding: 16px;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       background: #0f1419;
@@ -68,6 +68,10 @@
       background: rgba(255,255,255,0.1);
       color: white;
     }
+    button.success {
+      background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+      color: white;
+    }
     button:hover {
       transform: translateY(-1px);
     }
@@ -101,6 +105,73 @@
       font-size: 18px;
       font-weight: bold;
     }
+    .queue-section {
+      margin-top: 16px;
+      padding-top: 16px;
+      border-top: 1px solid rgba(255,255,255,0.1);
+    }
+    .queue-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+    .queue-header h2 {
+      font-size: 13px;
+      color: #79d5e9;
+    }
+    .queue-count {
+      font-size: 11px;
+      color: rgba(255,255,255,0.5);
+    }
+    .queue-item {
+      padding: 8px 10px;
+      background: rgba(255,255,255,0.05);
+      border-radius: 6px;
+      margin-bottom: 4px;
+      font-size: 11px;
+    }
+    .queue-item .vehicle {
+      color: white;
+      font-weight: 500;
+    }
+    .queue-item .config {
+      color: rgba(255,255,255,0.4);
+      font-size: 10px;
+    }
+    .queue-item .status-badge {
+      display: inline-block;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 9px;
+      text-transform: uppercase;
+      margin-top: 4px;
+    }
+    .queue-item .status-badge.pending {
+      background: rgba(234, 179, 8, 0.2);
+      color: #fbbf24;
+    }
+    .queue-item .status-badge.running {
+      background: rgba(121, 213, 233, 0.2);
+      color: #79d5e9;
+    }
+    .queue-item .status-badge.complete {
+      background: rgba(34, 197, 94, 0.2);
+      color: #4ade80;
+    }
+    .queue-item .status-badge.error {
+      background: rgba(239, 68, 68, 0.2);
+      color: #f87171;
+    }
+    .queue-item .price {
+      color: #4ade80;
+      font-weight: 600;
+    }
+    .queue-scroll {
+      max-height: 150px;
+      overflow-y: auto;
+      margin-bottom: 8px;
+    }
   </style>
 </head>
 <body>
@@ -123,10 +194,24 @@
     <div class="value" id="resultValue">-</div>
   </div>
 
+  <!-- Queue Section -->
+  <div id="queueSection" class="queue-section" style="display:none;">
+    <div class="queue-header">
+      <h2>Quote Queue</h2>
+      <span id="queueCount" class="queue-count">0 pending</span>
+    </div>
+    <div id="queueList" class="queue-scroll"></div>
+    <button id="processQueueBtn" class="success" style="display:none;">
+      Process Queue
+    </button>
+  </div>
+
   <div class="help">
     1. Login to Lex portal<br>
     2. Go to Quote page<br>
-    3. Click Capture Session
+    3. Click Capture Session<br>
+    4. Queue vehicles in SplitLease admin<br>
+    5. Click Process Queue
   </div>
 
   <script src="popup.js"></script>
