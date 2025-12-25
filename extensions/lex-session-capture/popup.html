@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    body {
+      width: 280px;
+      padding: 16px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #0f1419;
+      color: white;
+    }
+    h1 {
+      font-size: 15px;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .status {
+      padding: 12px;
+      border-radius: 8px;
+      margin-bottom: 12px;
+      font-size: 13px;
+      line-height: 1.4;
+    }
+    .status.success {
+      background: rgba(34, 197, 94, 0.2);
+      border: 1px solid rgba(34, 197, 94, 0.3);
+      color: #4ade80;
+    }
+    .status.error {
+      background: rgba(239, 68, 68, 0.2);
+      border: 1px solid rgba(239, 68, 68, 0.3);
+      color: #f87171;
+    }
+    .status.warning {
+      background: rgba(234, 179, 8, 0.2);
+      border: 1px solid rgba(234, 179, 8, 0.3);
+      color: #fbbf24;
+    }
+    .status.info {
+      background: rgba(121, 213, 233, 0.1);
+      border: 1px solid rgba(121, 213, 233, 0.2);
+      color: #79d5e9;
+    }
+    button {
+      width: 100%;
+      padding: 12px;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    button.primary {
+      background: linear-gradient(135deg, #79d5e9 0%, #5bc0d8 100%);
+      color: #0f1419;
+    }
+    button.primary:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(121, 213, 233, 0.3);
+    }
+    button.primary:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
+    }
+    .help {
+      margin-top: 12px;
+      font-size: 11px;
+      color: rgba(255,255,255,0.4);
+      line-height: 1.5;
+    }
+  </style>
+</head>
+<body>
+  <h1>🚗 Lex Session Capture</h1>
+
+  <div id="status" class="status info">
+    Checking...
+  </div>
+
+  <button id="captureBtn" class="primary" disabled>
+    Capture Session
+  </button>
+
+  <div class="help">
+    1. Login to Lex portal<br>
+    2. Go to Quote page (start any quote)<br>
+    3. Click Capture Session
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
