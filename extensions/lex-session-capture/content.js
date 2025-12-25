@@ -1,31 +1,36 @@
 // Content script - runs in the context of the Lex page
 // Uses DOM automation (like Playwright) instead of API calls
 // Intercepts API responses for accurate data extraction
+// Runs at document_start to override alerts before page scripts load
 
 // Store for intercepted API responses
 let lastQuoteResponse = null;
 
-// Inject XHR interceptor and alert override into page context
+// Inject alert override IMMEDIATELY (before page scripts run)
+(function injectAlertOverride() {
+  const script = document.createElement('script');
+  script.textContent = `
+    // Override alert FIRST before anything else
+    window.alert = function(message) {
+      console.log('[LexAuto] Auto-dismissed alert:', message);
+      return;
+    };
+    window.confirm = function(message) {
+      console.log('[LexAuto] Auto-accepted confirm:', message);
+      return true;
+    };
+    console.log('[LexAuto] Alert/confirm overrides installed');
+  `;
+  // Inject into head or documentElement as early as possible
+  (document.head || document.documentElement).appendChild(script);
+  script.remove();
+})();
+
+// Inject XHR interceptor (can wait for document to be ready)
 function injectResponseInterceptor() {
   const script = document.createElement('script');
   script.textContent = `
     (function() {
-      // Override alert to auto-dismiss VED warnings and other alerts
-      const originalAlert = window.alert;
-      window.alert = function(message) {
-        console.log('[LexAuto] Auto-dismissed alert:', message);
-        // Don't show the alert - just log it
-        // The automation will continue
-        return;
-      };
-
-      // Also override confirm to auto-accept
-      const originalConfirm = window.confirm;
-      window.confirm = function(message) {
-        console.log('[LexAuto] Auto-accepted confirm:', message);
-        return true;
-      };
-
       // Store original XHR
       const originalOpen = XMLHttpRequest.prototype.open;
       const originalSend = XMLHttpRequest.prototype.send;
@@ -83,8 +88,12 @@ window.addEventListener('message', (event) => {
   }
 });
 
-// Install interceptor on load
-injectResponseInterceptor();
+// Install XHR interceptor when DOM is ready
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', injectResponseInterceptor);
+} else {
+  injectResponseInterceptor();
+}
 
 const CONTRACT_TYPE_CODES = {
   'contract_hire_with_maintenance': '2',

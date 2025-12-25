@@ -272,6 +272,36 @@ export const lexQuoteRequests = pgTable("lex_quote_requests", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+// Lex quote queue (for browser extension automation)
+export const lexQuoteQueue = pgTable("lex_quote_queue", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  vehicleId: uuid("vehicle_id").references(() => vehicles.id, { onDelete: "cascade" }),
+  capCode: text("cap_code"),
+  manufacturer: text("manufacturer").notNull(),
+  model: text("model").notNull(),
+  variant: text("variant"),
+  lexMakeCode: text("lex_make_code").notNull(),
+  lexModelCode: text("lex_model_code").notNull(),
+  lexVariantCode: text("lex_variant_code").notNull(),
+  term: integer("term").notNull(),
+  mileage: integer("mileage").notNull(),
+  contractType: text("contract_type").notNull(),
+  paymentPlan: text("payment_plan").default("spread_3_down"),
+  co2: integer("co2"),
+  customOtrp: integer("custom_otrp"), // For Fleet Marque pricing (in pence)
+  status: text("status").notNull().default("pending"), // pending, running, complete, error, flagged
+  monthlyRental: integer("monthly_rental"), // Result in pence
+  initialRental: integer("initial_rental"), // Result in pence
+  otrp: integer("otrp"), // Result in pence
+  brokerOtrp: integer("broker_otrp"), // Result in pence
+  quoteReference: text("quote_reference"),
+  fleetMarquePrice: integer("fleet_marque_price"), // FM price in pence if better
+  fleetMarqueSavings: integer("fleet_marque_savings"), // Savings in pence
+  error: text("error"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
 // Fleet Marque types
 export type FleetMarqueTerm = {
   id: string;
