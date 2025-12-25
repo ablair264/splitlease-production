@@ -4,6 +4,21 @@ import { lexSessions } from "@/lib/db/schema";
 import { eq, and, gt, desc } from "drizzle-orm";
 import type { LexProfile } from "@/lib/db/schema";
 
+// CORS headers for bookmarklet cross-origin requests
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type",
+};
+
+/**
+ * OPTIONS /api/lex-autolease/session
+ * Handle CORS preflight for bookmarklet
+ */
+export async function OPTIONS() {
+  return new NextResponse(null, { status: 204, headers: corsHeaders });
+}
+
 /**
  * GET /api/lex-autolease/session
  * Check if there's a valid session stored
@@ -69,7 +84,7 @@ export async function POST(request: NextRequest) {
     if (!csrfToken || !cookies) {
       return NextResponse.json(
         { error: "Missing required session data (csrfToken, cookies)" },
-        { status: 400 }
+        { status: 400, headers: corsHeaders }
       );
     }
 
@@ -110,12 +125,12 @@ export async function POST(request: NextRequest) {
       username: safeProfile.Username || "Unknown",
       expiresAt,
       message: "Session saved successfully. You can now run quotes from the server.",
-    });
+    }, { headers: corsHeaders });
   } catch (error) {
     console.error("Error saving session:", error);
     return NextResponse.json(
       { error: "Failed to save session" },
-      { status: 500 }
+      { status: 500, headers: corsHeaders }
     );
   }
 }
