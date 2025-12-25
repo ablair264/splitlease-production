@@ -2,7 +2,8 @@ import { NextRequest } from "next/server";
 import { auth } from "@/lib/auth";
 import jwt from "jsonwebtoken";
 
-const RAILWAY_API_URL = process.env.NEXT_PUBLIC_API_URL || "https://splitfin-broker-production.up.railway.app";
+// Use VPS for Lex Playwright (Railway IPs are blocked by Lex)
+const RAILWAY_API_URL = process.env.LEX_PLAYWRIGHT_API_URL || "http://87.106.76.43:3000";
 
 /**
  * Create a JWT token for Railway API authentication
