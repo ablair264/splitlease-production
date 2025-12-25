@@ -18,7 +18,6 @@ import {
   ChevronRight,
   Building2,
   FileSpreadsheet,
-  Zap,
   Menu,
   X,
   type LucideIcon,
@@ -61,7 +60,6 @@ const navigation: NavSection[] = [
     label: "PROVIDERS",
     items: [
       { name: "Lex Autolease", href: "/admin/lex-autolease", icon: Building2 },
-      { name: "Lex Playwright", href: "/admin/lex-playwright", icon: Zap },
       { name: "Ogilvie Fleet", href: "/admin/ogilvie", icon: Building2 },
       { name: "Venus/Drivalia", href: "/admin/uploader", icon: FileSpreadsheet },
       { name: "Terms Holders", href: "/admin/fleet-marque", icon: FileSpreadsheet },
