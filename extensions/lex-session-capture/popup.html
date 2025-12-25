@@ -9,7 +9,7 @@
       box-sizing: border-box;
     }
     body {
-      width: 280px;
+      width: 300px;
       padding: 16px;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       background: #0f1419;
@@ -51,33 +51,55 @@
     }
     button {
       width: 100%;
-      padding: 12px;
+      padding: 10px;
       border: none;
       border-radius: 8px;
-      font-size: 14px;
+      font-size: 13px;
       font-weight: 600;
       cursor: pointer;
       transition: all 0.2s;
+      margin-bottom: 8px;
     }
     button.primary {
       background: linear-gradient(135deg, #79d5e9 0%, #5bc0d8 100%);
       color: #0f1419;
     }
-    button.primary:hover {
-      transform: translateY(-1px);
-      box-shadow: 0 4px 12px rgba(121, 213, 233, 0.3);
+    button.secondary {
+      background: rgba(255,255,255,0.1);
+      color: white;
     }
-    button.primary:disabled {
+    button:hover {
+      transform: translateY(-1px);
+    }
+    button:disabled {
       opacity: 0.5;
       cursor: not-allowed;
       transform: none;
-      box-shadow: none;
     }
     .help {
-      margin-top: 12px;
+      margin-top: 8px;
       font-size: 11px;
       color: rgba(255,255,255,0.4);
       line-height: 1.5;
+    }
+    .result {
+      margin-top: 12px;
+      padding: 12px;
+      border-radius: 8px;
+      font-size: 12px;
+      background: rgba(0,0,0,0.3);
+      border: 1px solid rgba(255,255,255,0.1);
+    }
+    .result .label {
+      color: rgba(255,255,255,0.5);
+      font-size: 10px;
+      text-transform: uppercase;
+      margin-bottom: 2px;
+    }
+    .result .value {
+      color: #4ade80;
+      font-size: 18px;
+      font-weight: bold;
     }
   </style>
 </head>
@@ -92,9 +114,18 @@
     Capture Session
   </button>
 
+  <button id="testBtn" class="secondary" style="display:none;">
+    Test Quote (Abarth 500e)
+  </button>
+
+  <div id="result" class="result" style="display:none;">
+    <div class="label">Monthly Rental</div>
+    <div class="value" id="resultValue">-</div>
+  </div>
+
   <div class="help">
     1. Login to Lex portal<br>
-    2. Go to Quote page (start any quote)<br>
+    2. Go to Quote page<br>
     3. Click Capture Session
   </div>
 

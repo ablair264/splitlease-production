@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Lex Session Capture",
-  "version": "1.0.5",
+  "version": "1.1.0",
   "description": "Capture Lex Autolease session for SplitLease quotes",
   "permissions": [
     "activeTab",
