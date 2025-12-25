@@ -71,6 +71,8 @@ export function QuoteRunner({ onQuotesComplete }: { onQuotesComplete?: () => voi
   const [selectedMake, setSelectedMake] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [vehiclesLoading, setVehiclesLoading] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const ITEMS_PER_PAGE = 20;
 
   // Quote configuration
   const [config, setConfig] = useState<QuoteConfig>({
@@ -134,6 +136,18 @@ export function QuoteRunner({ onQuotesComplete }: { onQuotesComplete?: () => voi
     );
   });
 
+  // Pagination
+  const totalPages = Math.ceil(filteredVehicles.length / ITEMS_PER_PAGE);
+  const paginatedVehicles = filteredVehicles.slice(
+    (currentPage - 1) * ITEMS_PER_PAGE,
+    currentPage * ITEMS_PER_PAGE
+  );
+
+  // Reset page when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [selectedMake, searchQuery]);
+
   // Add vehicle to queue
   const addToQueue = (vehicle: Vehicle) => {
     // Check if already in queue
@@ -178,6 +192,7 @@ export function QuoteRunner({ onQuotesComplete }: { onQuotesComplete?: () => voi
             term: v.config.term,
             mileage: v.config.mileage,
             contractType: v.config.contractType,
+            co2: v.co2,
           })),
         }),
       });
@@ -337,7 +352,7 @@ export function QuoteRunner({ onQuotesComplete }: { onQuotesComplete?: () => voi
               <select
                 value={selectedMake}
                 onChange={(e) => setSelectedMake(e.target.value)}
-                className="px-3 py-2 rounded-lg text-sm bg-white/5 border border-white/10 text-white"
+                className="px-3 py-2 rounded-lg text-sm bg-[#1a1f2a] border border-white/10 text-white [&>option]:bg-[#1a1f2a] [&>option]:text-white"
               >
                 <option value="">All Makes</option>
                 {makes.map((make) => (
@@ -360,7 +375,7 @@ export function QuoteRunner({ onQuotesComplete }: { onQuotesComplete?: () => voi
             </div>
 
             {/* Vehicle List */}
-            <div className="max-h-[400px] overflow-y-auto space-y-2">
+            <div className="max-h-[350px] overflow-y-auto space-y-2">
               {vehiclesLoading ? (
                 <div className="text-center py-8 text-white/40">
                   <Loader2 className="h-5 w-5 animate-spin mx-auto" />
@@ -370,7 +385,7 @@ export function QuoteRunner({ onQuotesComplete }: { onQuotesComplete?: () => voi
                   No vehicles with Lex codes found
                 </div>
               ) : (
-                filteredVehicles.slice(0, 50).map((vehicle) => {
+                paginatedVehicles.map((vehicle) => {
                   const inQueue = queue.some((q) => q.id === vehicle.id);
                   return (
                     <div
@@ -401,12 +416,35 @@ export function QuoteRunner({ onQuotesComplete }: { onQuotesComplete?: () => voi
                   );
                 })
               )}
-              {filteredVehicles.length > 50 && (
-                <div className="text-center py-2 text-white/40 text-xs">
-                  Showing 50 of {filteredVehicles.length} vehicles
-                </div>
-              )}
             </div>
+
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between mt-4 pt-4 border-t border-white/10">
+                <span className="text-xs text-white/50">
+                  {filteredVehicles.length} vehicles
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                    disabled={currentPage === 1}
+                    className="px-3 py-1 rounded text-xs bg-white/10 text-white disabled:opacity-30 disabled:cursor-not-allowed hover:bg-white/20"
+                  >
+                    Prev
+                  </button>
+                  <span className="text-xs text-white/70">
+                    {currentPage} / {totalPages}
+                  </span>
+                  <button
+                    onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                    disabled={currentPage === totalPages}
+                    className="px-3 py-1 rounded text-xs bg-white/10 text-white disabled:opacity-30 disabled:cursor-not-allowed hover:bg-white/20"
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Right: Quote Config & Queue */}
@@ -424,7 +462,7 @@ export function QuoteRunner({ onQuotesComplete }: { onQuotesComplete?: () => voi
                   <select
                     value={config.term}
                     onChange={(e) => setConfig({ ...config, term: parseInt(e.target.value) })}
-                    className="w-full px-3 py-2 rounded-lg text-sm bg-white/5 border border-white/10 text-white"
+                    className="w-full px-3 py-2 rounded-lg text-sm bg-[#1a1f2a] border border-white/10 text-white [&>option]:bg-[#1a1f2a] [&>option]:text-white"
                   >
                     {TERMS.map((t) => (
                       <option key={t} value={t}>
@@ -439,7 +477,7 @@ export function QuoteRunner({ onQuotesComplete }: { onQuotesComplete?: () => voi
                   <select
                     value={config.mileage}
                     onChange={(e) => setConfig({ ...config, mileage: parseInt(e.target.value) })}
-                    className="w-full px-3 py-2 rounded-lg text-sm bg-white/5 border border-white/10 text-white"
+                    className="w-full px-3 py-2 rounded-lg text-sm bg-[#1a1f2a] border border-white/10 text-white [&>option]:bg-[#1a1f2a] [&>option]:text-white"
                   >
                     {MILEAGES.map((m) => (
                       <option key={m} value={m}>
@@ -454,7 +492,7 @@ export function QuoteRunner({ onQuotesComplete }: { onQuotesComplete?: () => voi
                   <select
                     value={config.contractType}
                     onChange={(e) => setConfig({ ...config, contractType: e.target.value })}
-                    className="w-full px-3 py-2 rounded-lg text-sm bg-white/5 border border-white/10 text-white"
+                    className="w-full px-3 py-2 rounded-lg text-sm bg-[#1a1f2a] border border-white/10 text-white [&>option]:bg-[#1a1f2a] [&>option]:text-white"
                   >
                     {CONTRACT_TYPES.map((ct) => (
                       <option key={ct.value} value={ct.value}>

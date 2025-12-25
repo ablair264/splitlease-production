@@ -1,13 +1,17 @@
 {
   "manifest_version": 3,
-  "name": "Lex Session Capture",
-  "version": "1.2.0",
-  "description": "Capture Lex Autolease session for SplitLease quotes",
+  "name": "Lex Quote Automation",
+  "version": "2.1.0",
+  "description": "Automate Lex Autolease quotes for SplitLease",
   "permissions": [
     "activeTab",
     "cookies",
-    "scripting"
+    "scripting",
+    "sidePanel"
   ],
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  },
   "host_permissions": [
     "https://associate.lexautolease.co.uk/*",
     "https://splitlease.netlify.app/*"
@@ -15,8 +19,15 @@
   "background": {
     "service_worker": "background.js"
   },
+  "content_scripts": [
+    {
+      "matches": ["https://associate.lexautolease.co.uk/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
   "action": {
-    "default_popup": "popup.html",
+    "default_title": "Open Lex Quote Automation",
     "default_icon": {
       "16": "icon16.png",
       "48": "icon48.png",

@@ -1,9 +1,15 @@
 // Background service worker
+// Orchestrates quote automation via content script
 
 const API_URL = 'https://splitlease.netlify.app';
 const LEX_URL = 'https://associate.lexautolease.co.uk';
 
-// Store session data
+// Open side panel when extension icon is clicked
+chrome.action.onClicked.addListener((tab) => {
+  chrome.sidePanel.open({ windowId: tab.windowId });
+});
+
+// Store session data (for reference, not needed for DOM automation)
 let sessionData = null;
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -15,7 +21,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.action === 'runQuote') {
-    runQuoteFromBrowser(message.data)
+    runQuoteViaContentScript(message.data)
+      .then(sendResponse)
+      .catch(err => sendResponse({ error: err.message }));
+    return true;
+  }
+
+  if (message.action === 'testLoadVehicle') {
+    testLoadVehicle(message.data)
       .then(sendResponse)
       .catch(err => sendResponse({ error: err.message }));
     return true;
@@ -35,7 +48,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 });
 
 async function handleCapture({ csrfToken, cookies, profile }) {
-  // Store locally for quote running
+  // Store locally
   sessionData = { csrfToken, cookies, profile };
 
   // Also send to server for reference
@@ -54,21 +67,88 @@ async function handleCapture({ csrfToken, cookies, profile }) {
   return data;
 }
 
+// Find the Lex tab with quote form
+async function findLexQuoteTab() {
+  const tabs = await chrome.tabs.query({ url: `${LEX_URL}/*` });
+
+  for (const tab of tabs) {
+    try {
+      // Check if this tab has the quote form
+      const response = await chrome.tabs.sendMessage(tab.id, { action: 'checkPageReady' });
+      if (response?.ready) {
+        return tab;
+      }
+    } catch (e) {
+      // Content script not loaded or error - skip this tab
+      console.log(`Tab ${tab.id} not ready:`, e.message);
+    }
+  }
+
+  return null;
+}
+
+// Test loading just make/model/variant
+async function testLoadVehicle(data) {
+  const lexTab = await findLexQuoteTab();
+
+  if (!lexTab) {
+    throw new Error('No Lex quote page found. Please navigate to QuickQuote.aspx');
+  }
+
+  console.log(`[Background] Testing vehicle load via tab ${lexTab.id}`);
+
+  const result = await chrome.tabs.sendMessage(lexTab.id, {
+    action: 'testLoadVehicle',
+    data
+  });
+
+  if (result.error) {
+    throw new Error(result.error);
+  }
+
+  return result;
+}
+
+// Run a quote via the content script (DOM automation)
+async function runQuoteViaContentScript(quoteData) {
+  // Find a Lex tab with the quote form ready
+  const lexTab = await findLexQuoteTab();
+
+  if (!lexTab) {
+    throw new Error('No Lex quote page found. Please navigate to the Quote page on associate.lexautolease.co.uk');
+  }
+
+  console.log(`[Background] Running quote via tab ${lexTab.id}`);
+
+  // Send message to content script to run the quote
+  const result = await chrome.tabs.sendMessage(lexTab.id, {
+    action: 'runQuoteInPage',
+    data: quoteData
+  });
+
+  if (result.error) {
+    throw new Error(result.error);
+  }
+
+  return result;
+}
+
 // Process the quote queue
 async function processQuoteQueue() {
-  if (!sessionData) {
-    throw new Error('No session captured. Please capture session first.');
+  // Find a Lex tab first
+  const lexTab = await findLexQuoteTab();
+
+  if (!lexTab) {
+    throw new Error('No Lex quote page found. Please navigate to the Quote page on associate.lexautolease.co.uk');
   }
 
-  // Verify we still have Lex cookies
-  const lexCookies = await chrome.cookies.getAll({ domain: 'associate.lexautolease.co.uk' });
-  console.log('Lex cookies available:', lexCookies.length);
-  if (lexCookies.length === 0) {
-    throw new Error('No Lex cookies found. Please login to Lex and recapture session.');
-  }
-
-  // Fetch queue from server
-  const queueResponse = await fetch(`${API_URL}/api/lex-autolease/quote-queue`);
+  // Fetch queue from server (with cache-busting)
+  const queueResponse = await fetch(`${API_URL}/api/lex-autolease/quote-queue?_t=${Date.now()}`, {
+    cache: 'no-store',
+    headers: {
+      'Cache-Control': 'no-cache'
+    }
+  });
   const queueData = await queueResponse.json();
 
   if (!queueData.queue || queueData.queue.length === 0) {
@@ -89,29 +169,40 @@ async function processQuoteQueue() {
       // Update status to running
       await updateQueueItem(item.vehicleId, 'running');
 
-      // Run the quote
-      const result = await runQuoteFromBrowser({
-        makeId: item.lexMakeCode,
-        modelId: item.lexModelCode,
-        variantId: item.lexVariantCode,
-        term: item.term,
-        mileage: item.mileage,
-        paymentPlan: 'spread_3_down', // Default payment plan
-        contractType: item.contractType
+      // Run the quote via content script
+      const result = await chrome.tabs.sendMessage(lexTab.id, {
+        action: 'runQuoteInPage',
+        data: {
+          makeId: item.lexMakeCode,
+          modelId: item.lexModelCode,
+          variantId: item.lexVariantCode,
+          term: item.term,
+          mileage: item.mileage,
+          paymentPlan: item.paymentPlan || 'spread_3_down',
+          contractType: item.contractType,
+          co2: item.co2,
+          customOtrp: item.customOtrp // Fleet Marque pricing if rerunning
+        }
       });
 
-      // Update status to complete with result
+      if (result.error) {
+        throw new Error(result.error);
+      }
+
+      // Update status to complete with result (including brokerOtrp for FM comparison)
       await updateQueueItem(item.vehicleId, 'complete', {
         quoteId: result.quoteId,
         monthlyRental: result.monthlyRental,
         initialRental: result.initialRental,
-        otrp: result.otrp
+        otrp: result.otrp,
+        brokerOtrp: result.brokerOtrp
       });
 
       processed++;
 
-      // Small delay between quotes to avoid rate limiting
-      await sleep(500);
+      // Navigate back to new quote for next vehicle
+      // The content script could handle this, or we reload
+      await navigateToNewQuote(lexTab.id);
 
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
@@ -120,6 +211,13 @@ async function processQuoteQueue() {
       // Update status to error
       await updateQueueItem(item.vehicleId, 'error', null, errorMessage);
       errors++;
+
+      // Try to navigate back for next quote
+      try {
+        await navigateToNewQuote(lexTab.id);
+      } catch (e) {
+        console.error('Failed to navigate to new quote:', e);
+      }
     }
   }
 
@@ -128,6 +226,59 @@ async function processQuoteQueue() {
     processed,
     errors
   };
+}
+
+// Navigate the tab to a new quote page and wait for content script to be ready
+async function navigateToNewQuote(tabId) {
+  console.log('[Background] Navigating to new quote page...');
+
+  await chrome.tabs.update(tabId, {
+    url: `${LEX_URL}/QuickQuote.aspx`
+  });
+
+  // Wait for tab to finish loading
+  await new Promise((resolve) => {
+    const listener = (updatedTabId, changeInfo) => {
+      if (updatedTabId === tabId && changeInfo.status === 'complete') {
+        chrome.tabs.onUpdated.removeListener(listener);
+        resolve();
+      }
+    };
+    chrome.tabs.onUpdated.addListener(listener);
+    // Timeout after 30 seconds
+    setTimeout(() => {
+      chrome.tabs.onUpdated.removeListener(listener);
+      resolve();
+    }, 30000);
+  });
+
+  console.log('[Background] Page loaded, waiting for content script...');
+
+  // Wait a bit for content script to initialize
+  await sleep(2000);
+
+  // Poll until content script responds
+  let ready = false;
+  let attempts = 0;
+  while (!ready && attempts < 20) {
+    try {
+      const response = await chrome.tabs.sendMessage(tabId, { action: 'checkPageReady' });
+      if (response?.ready) {
+        ready = true;
+        console.log('[Background] Content script ready!');
+      }
+    } catch (e) {
+      console.log('[Background] Content script not ready yet, retrying...', attempts);
+    }
+    if (!ready) {
+      await sleep(500);
+      attempts++;
+    }
+  }
+
+  if (!ready) {
+    throw new Error('Content script failed to load after navigation');
+  }
 }
 
 // Update queue item status on server
@@ -143,151 +294,6 @@ async function updateQueueItem(vehicleId, status, result = null, error = null) {
   });
 }
 
-// Helper to safely parse JSON response
-async function safeJsonParse(response, context) {
-  const text = await response.text();
-  if (!text || text.trim() === '') {
-    throw new Error(`${context}: Empty response from server`);
-  }
-  try {
-    return JSON.parse(text);
-  } catch (e) {
-    // Log first 200 chars to help debug
-    console.error(`${context} - Invalid JSON:`, text.substring(0, 200));
-    throw new Error(`${context}: Invalid JSON response`);
-  }
-}
-
-// Run a quote directly from the browser (bypasses IP blocking)
-async function runQuoteFromBrowser({ makeId, modelId, variantId, term, mileage, paymentPlan, contractType }) {
-  if (!sessionData) {
-    throw new Error('No session captured. Please capture session first.');
-  }
-
-  const { csrfToken, cookies } = sessionData;
-
-  // Headers for all Lex API requests - must include cookies manually in service worker
-  const lexHeaders = {
-    'Content-Type': 'application/json; charset=utf-8',
-    'x-csrf-check': csrfToken,
-    'Cookie': cookies
-  };
-
-  // Step 1: Get variant details
-  const variantPayload = {
-    manufacturer: makeId,
-    model: modelId,
-    variant: variantId
-  };
-  console.log('GetVariant request:', variantPayload);
-  console.log('Using cookies:', cookies ? 'yes (' + cookies.length + ' chars)' : 'NO COOKIES');
-
-  const variantResponse = await fetch(`${LEX_URL}/services/Quote.svc/GetVariant`, {
-    method: 'POST',
-    headers: lexHeaders,
-    body: JSON.stringify(variantPayload)
-  });
-
-  console.log('GetVariant response status:', variantResponse.status);
-  console.log('GetVariant response headers:', Object.fromEntries(variantResponse.headers.entries()));
-
-  // Check if we got redirected to login page
-  const contentType = variantResponse.headers.get('content-type');
-  console.log('Content-Type:', contentType);
-
-  if (!variantResponse.ok) {
-    const errorText = await variantResponse.text();
-    console.error('GetVariant error response:', errorText.substring(0, 200));
-    throw new Error(`GetVariant failed: ${variantResponse.status}`);
-  }
-
-  const variantData = await safeJsonParse(variantResponse, 'GetVariant');
-
-  // Step 2: Calculate quote
-  const quotePayload = {
-    ManufacturerId: makeId,
-    ModelId: modelId,
-    VariantId: variantId,
-    OTRP: variantData.OTRP || variantData.otrp,
-    BPM: variantData.BPM || 0,
-    Term: term,
-    MPA: mileage,
-    MaintenanceIncluded: contractType.includes('maintenance'),
-    PaymentPlanId: getPaymentPlanId(paymentPlan),
-    ContractTypeId: getContractTypeId(contractType),
-    // Optional fields
-    BrokerOTRP: null,
-    ExcessMileageCharge: null
-  };
-
-  const quoteResponse = await fetch(`${LEX_URL}/services/Quote.svc/CalculateQuote`, {
-    method: 'POST',
-    headers: lexHeaders,
-    body: JSON.stringify(quotePayload)
-  });
-
-  if (!quoteResponse.ok) {
-    const errorText = await quoteResponse.text();
-    console.error('CalculateQuote error response:', errorText.substring(0, 200));
-    throw new Error(`CalculateQuote failed: ${quoteResponse.status}`);
-  }
-
-  const quoteData = await safeJsonParse(quoteResponse, 'CalculateQuote');
-
-  // Step 3: Get quote line details
-  const lineResponse = await fetch(`${LEX_URL}/services/Quote.svc/GetQuoteLine`, {
-    method: 'POST',
-    headers: lexHeaders,
-    body: JSON.stringify({
-      QuoteId: quoteData.QuoteId || quoteData.quoteId
-    })
-  });
-
-  if (!lineResponse.ok) {
-    const errorText = await lineResponse.text();
-    console.error('GetQuoteLine error response:', errorText.substring(0, 200));
-    throw new Error(`GetQuoteLine failed: ${lineResponse.status}`);
-  }
-
-  const lineData = await safeJsonParse(lineResponse, 'GetQuoteLine');
-
-  return {
-    success: true,
-    quoteId: quoteData.QuoteId || quoteData.quoteId,
-    monthlyRental: lineData.MonthlyRental || lineData.monthlyRental,
-    initialRental: lineData.InitialRental || lineData.initialRental,
-    otrp: quotePayload.OTRP,
-    term,
-    mileage
-  };
-}
-
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
-}
-
-function getPaymentPlanId(plan) {
-  const plans = {
-    'monthly_in_advance': 1,
-    'quarterly_in_advance': 2,
-    'annual_in_advance': 3,
-    'spread_3_down': 4,
-    'spread_6_down': 5,
-    'spread_12_down': 6,
-    'three_down_terminal_pause': 7,
-    'six_down_terminal_pause': 8,
-    'nine_down_terminal_pause': 9
-  };
-  return plans[plan] || 4;
-}
-
-function getContractTypeId(type) {
-  const types = {
-    'contract_hire_without_maintenance': 1,
-    'contract_hire_with_maintenance': 2,
-    'personal_contract_hire': 3,
-    'personal_contract_hire_without_maint': 4,
-    'salary_sacrifice': 5
-  };
-  return types[type] || 1;
 }

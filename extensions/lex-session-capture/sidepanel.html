@@ -9,18 +9,21 @@
       box-sizing: border-box;
     }
     body {
-      width: 320px;
+      width: 100%;
+      min-height: 100vh;
       padding: 16px;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       background: #0f1419;
       color: white;
     }
     h1 {
-      font-size: 15px;
-      margin-bottom: 12px;
+      font-size: 16px;
+      margin-bottom: 16px;
       display: flex;
       align-items: center;
       gap: 8px;
+      border-bottom: 1px solid rgba(255,255,255,0.1);
+      padding-bottom: 12px;
     }
     .status {
       padding: 12px;
@@ -51,7 +54,7 @@
     }
     button {
       width: 100%;
-      padding: 10px;
+      padding: 12px;
       border: none;
       border-radius: 8px;
       font-size: 13px;
@@ -74,6 +77,7 @@
     }
     button:hover {
       transform: translateY(-1px);
+      opacity: 0.9;
     }
     button:disabled {
       opacity: 0.5;
@@ -81,10 +85,13 @@
       transform: none;
     }
     .help {
-      margin-top: 8px;
-      font-size: 11px;
-      color: rgba(255,255,255,0.4);
-      line-height: 1.5;
+      margin-top: 16px;
+      padding: 12px;
+      background: rgba(255,255,255,0.05);
+      border-radius: 8px;
+      font-size: 12px;
+      color: rgba(255,255,255,0.5);
+      line-height: 1.6;
     }
     .result {
       margin-top: 12px;
@@ -102,11 +109,11 @@
     }
     .result .value {
       color: #4ade80;
-      font-size: 18px;
+      font-size: 20px;
       font-weight: bold;
     }
     .queue-section {
-      margin-top: 16px;
+      margin-top: 20px;
       padding-top: 16px;
       border-top: 1px solid rgba(255,255,255,0.1);
     }
@@ -114,10 +121,10 @@
       display: flex;
       justify-content: space-between;
       align-items: center;
-      margin-bottom: 8px;
+      margin-bottom: 12px;
     }
     .queue-header h2 {
-      font-size: 13px;
+      font-size: 14px;
       color: #79d5e9;
     }
     .queue-count {
@@ -125,27 +132,28 @@
       color: rgba(255,255,255,0.5);
     }
     .queue-item {
-      padding: 8px 10px;
+      padding: 10px 12px;
       background: rgba(255,255,255,0.05);
-      border-radius: 6px;
-      margin-bottom: 4px;
-      font-size: 11px;
+      border-radius: 8px;
+      margin-bottom: 6px;
+      font-size: 12px;
     }
     .queue-item .vehicle {
       color: white;
       font-weight: 500;
+      margin-bottom: 2px;
     }
     .queue-item .config {
       color: rgba(255,255,255,0.4);
-      font-size: 10px;
+      font-size: 11px;
     }
     .queue-item .status-badge {
       display: inline-block;
-      padding: 2px 6px;
+      padding: 3px 8px;
       border-radius: 4px;
-      font-size: 9px;
+      font-size: 10px;
       text-transform: uppercase;
-      margin-top: 4px;
+      margin-top: 6px;
     }
     .queue-item .status-badge.pending {
       background: rgba(234, 179, 8, 0.2);
@@ -154,6 +162,11 @@
     .queue-item .status-badge.running {
       background: rgba(121, 213, 233, 0.2);
       color: #79d5e9;
+      animation: pulse 1.5s infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
     }
     .queue-item .status-badge.complete {
       background: rgba(34, 197, 94, 0.2);
@@ -166,11 +179,59 @@
     .queue-item .price {
       color: #4ade80;
       font-weight: 600;
+      font-size: 13px;
     }
     .queue-scroll {
-      max-height: 150px;
+      max-height: 400px;
       overflow-y: auto;
-      margin-bottom: 8px;
+      margin-bottom: 12px;
+    }
+    .progress-bar {
+      height: 4px;
+      background: rgba(255,255,255,0.1);
+      border-radius: 2px;
+      overflow: hidden;
+      margin-top: 8px;
+    }
+    .progress-bar .fill {
+      height: 100%;
+      background: linear-gradient(90deg, #79d5e9, #4ade80);
+      transition: width 0.3s;
+    }
+    .error-text {
+      cursor: help;
+    }
+    /* Flagged items (Fleet Marque has better price) */
+    .queue-item.flagged {
+      background: rgba(245, 158, 11, 0.1);
+      border: 1px solid rgba(245, 158, 11, 0.3);
+    }
+    .queue-item.flagged.selected {
+      background: rgba(245, 158, 11, 0.2);
+      border: 1px solid rgba(245, 158, 11, 0.5);
+    }
+    .queue-item .fm-checkbox {
+      width: 14px;
+      height: 14px;
+      margin-right: 8px;
+      cursor: pointer;
+      accent-color: #f59e0b;
+    }
+    .queue-item .fm-alert {
+      margin-top: 6px;
+      padding: 6px 8px;
+      background: rgba(245, 158, 11, 0.15);
+      border-radius: 4px;
+      font-size: 11px;
+      color: #fbbf24;
+    }
+    .queue-item .fm-alert .savings {
+      color: #4ade80;
+      font-weight: 600;
+    }
+    .status-badge.flagged {
+      background: rgba(245, 158, 11, 0.2);
+      color: #fbbf24;
     }
   </style>
 </head>
@@ -178,15 +239,19 @@
   <h1>🚗 Lex Quote Automation</h1>
 
   <div id="status" class="status info">
-    Checking...
+    Checking page status...
   </div>
 
   <button id="captureBtn" class="primary" disabled>
-    Capture Session
+    Checking...
+  </button>
+
+  <button id="testLoadBtn" class="secondary" style="display:none;">
+    Test Load Vehicle (BMW 3 Series)
   </button>
 
   <button id="testBtn" class="secondary" style="display:none;">
-    Test Quote (Abarth 500e)
+    Test Full Quote (BMW 3 Series)
   </button>
 
   <div id="result" class="result" style="display:none;">
@@ -200,6 +265,11 @@
       <h2>Quote Queue</h2>
       <span id="queueCount" class="queue-count">0 pending</span>
     </div>
+    <div id="progressContainer" style="display:none;">
+      <div class="progress-bar">
+        <div class="fill" id="progressFill" style="width: 0%"></div>
+      </div>
+    </div>
     <div id="queueList" class="queue-scroll"></div>
     <button id="processQueueBtn" class="success" style="display:none;">
       Process Queue
@@ -207,12 +277,13 @@
   </div>
 
   <div class="help">
+    <strong>How to use:</strong><br>
     1. Login to Lex portal<br>
     2. Go to Quote page<br>
     3. Queue vehicles in SplitLease admin<br>
-    4. Click Process Queue (watches automation run)
+    4. Click Process Queue and watch the automation
   </div>
 
-  <script src="popup.js"></script>
+  <script src="sidepanel.js"></script>
 </body>
 </html>
