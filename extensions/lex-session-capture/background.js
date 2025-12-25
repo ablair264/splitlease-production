@@ -136,6 +136,21 @@ async function updateQueueItem(vehicleId, status, result = null, error = null) {
   });
 }
 
+// Helper to safely parse JSON response
+async function safeJsonParse(response, context) {
+  const text = await response.text();
+  if (!text || text.trim() === '') {
+    throw new Error(`${context}: Empty response from server`);
+  }
+  try {
+    return JSON.parse(text);
+  } catch (e) {
+    // Log first 200 chars to help debug
+    console.error(`${context} - Invalid JSON:`, text.substring(0, 200));
+    throw new Error(`${context}: Invalid JSON response`);
+  }
+}
+
 // Run a quote directly from the browser (bypasses IP blocking)
 async function runQuoteFromBrowser({ makeId, modelId, variantId, term, mileage, paymentPlan, contractType }) {
   if (!sessionData) {
@@ -160,10 +175,12 @@ async function runQuoteFromBrowser({ makeId, modelId, variantId, term, mileage, 
   });
 
   if (!variantResponse.ok) {
+    const errorText = await variantResponse.text();
+    console.error('GetVariant error response:', errorText.substring(0, 200));
     throw new Error(`GetVariant failed: ${variantResponse.status}`);
   }
 
-  const variantData = await variantResponse.json();
+  const variantData = await safeJsonParse(variantResponse, 'GetVariant');
 
   // Step 2: Calculate quote
   const quotePayload = {
@@ -193,10 +210,12 @@ async function runQuoteFromBrowser({ makeId, modelId, variantId, term, mileage, 
   });
 
   if (!quoteResponse.ok) {
+    const errorText = await quoteResponse.text();
+    console.error('CalculateQuote error response:', errorText.substring(0, 200));
     throw new Error(`CalculateQuote failed: ${quoteResponse.status}`);
   }
 
-  const quoteData = await quoteResponse.json();
+  const quoteData = await safeJsonParse(quoteResponse, 'CalculateQuote');
 
   // Step 3: Get quote line details
   const lineResponse = await fetch(`${LEX_URL}/services/Quote.svc/GetQuoteLine`, {
@@ -212,10 +231,12 @@ async function runQuoteFromBrowser({ makeId, modelId, variantId, term, mileage, 
   });
 
   if (!lineResponse.ok) {
+    const errorText = await lineResponse.text();
+    console.error('GetQuoteLine error response:', errorText.substring(0, 200));
     throw new Error(`GetQuoteLine failed: ${lineResponse.status}`);
   }
 
-  const lineData = await lineResponse.json();
+  const lineData = await safeJsonParse(lineResponse, 'GetQuoteLine');
 
   return {
     success: true,
