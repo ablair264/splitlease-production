@@ -60,6 +60,13 @@ async function processQuoteQueue() {
     throw new Error('No session captured. Please capture session first.');
   }
 
+  // Verify we still have Lex cookies
+  const lexCookies = await chrome.cookies.getAll({ domain: 'associate.lexautolease.co.uk' });
+  console.log('Lex cookies available:', lexCookies.length);
+  if (lexCookies.length === 0) {
+    throw new Error('No Lex cookies found. Please login to Lex and recapture session.');
+  }
+
   // Fetch queue from server
   const queueResponse = await fetch(`${API_URL}/api/lex-autolease/quote-queue`);
   const queueData = await queueResponse.json();
@@ -160,6 +167,14 @@ async function runQuoteFromBrowser({ makeId, modelId, variantId, term, mileage, 
   const { csrfToken } = sessionData;
 
   // Step 1: Get variant details
+  const variantPayload = {
+    manufacturer: makeId,
+    model: modelId,
+    variant: variantId
+  };
+  console.log('GetVariant request:', variantPayload);
+  console.log('CSRF token:', csrfToken);
+
   const variantResponse = await fetch(`${LEX_URL}/services/Quote.svc/GetVariant`, {
     method: 'POST',
     headers: {
@@ -167,12 +182,15 @@ async function runQuoteFromBrowser({ makeId, modelId, variantId, term, mileage, 
       'x-csrf-check': csrfToken
     },
     credentials: 'include',
-    body: JSON.stringify({
-      manufacturer: makeId,
-      model: modelId,
-      variant: variantId
-    })
+    body: JSON.stringify(variantPayload)
   });
+
+  console.log('GetVariant response status:', variantResponse.status);
+  console.log('GetVariant response headers:', Object.fromEntries(variantResponse.headers.entries()));
+
+  // Check if we got redirected to login page
+  const contentType = variantResponse.headers.get('content-type');
+  console.log('Content-Type:', contentType);
 
   if (!variantResponse.ok) {
     const errorText = await variantResponse.text();
