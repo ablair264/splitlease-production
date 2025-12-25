@@ -127,7 +127,9 @@ export default function LexPlaywrightPage() {
   // Load vehicles via local proxy
   const loadVehicles = async () => {
     try {
-      const response = await fetch("/api/admin/lex-playwright?action=vehicles&limit=500");
+      const response = await fetch("/api/admin/lex-playwright?action=vehicles&limit=500", {
+        credentials: 'include',
+      });
       if (response.ok) {
         const data = await response.json();
         setVehicles(data.vehicles || []);
@@ -142,7 +144,9 @@ export default function LexPlaywrightPage() {
   // Load batch history via local proxy
   const loadBatches = async () => {
     try {
-      const response = await fetch("/api/admin/lex-playwright?action=batches");
+      const response = await fetch("/api/admin/lex-playwright?action=batches", {
+        credentials: 'include',
+      });
       if (response.ok) {
         const data = await response.json();
         setBatches(data.batches || []);
@@ -291,7 +295,9 @@ export default function LexPlaywrightPage() {
   // Load batch results via local proxy
   const loadBatchResults = async (batchId: string) => {
     try {
-      const response = await fetch(`/api/admin/lex-playwright?action=batch&batchId=${batchId}`);
+      const response = await fetch(`/api/admin/lex-playwright?action=batch&batchId=${batchId}`, {
+        credentials: 'include',
+      });
       if (response.ok) {
         const data = await response.json();
         setQuotes(data.quotes || []);
@@ -315,6 +321,7 @@ export default function LexPlaywrightPage() {
       const response = await fetch("/api/admin/lex-playwright", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: 'include',
         body: JSON.stringify({
           vehicleIds: Array.from(selectedVehicles),
           terms: Array.from(selectedTerms),
