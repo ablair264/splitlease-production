@@ -3,7 +3,46 @@
  */
 
 /**
- * Session capture script to run in browser console
+ * Generate the one-click bookmarklet code
+ * This creates a bookmarklet that captures and sends session to our API
+ */
+export function generateBookmarklet(apiUrl: string): string {
+  // The bookmarklet code - minified for URL
+  const code = `
+(function(){
+  if(!window.csrf_token){
+    alert('❌ Not logged into Lex!\\n\\nPlease login to associate.lexautolease.co.uk first, then click this bookmarklet again.');
+    return;
+  }
+  var data={
+    csrfToken:window.csrf_token,
+    cookies:document.cookie,
+    profile:window.profile||{}
+  };
+  fetch('${apiUrl}/api/lex-autolease/session',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify(data)
+  })
+  .then(function(r){return r.json()})
+  .then(function(result){
+    if(result.success){
+      alert('✅ Session Captured!\\n\\nYou can now run quotes from the admin panel.\\n\\nExpires: '+new Date(result.expiresAt).toLocaleString());
+    }else{
+      alert('❌ Failed to save session:\\n'+result.error);
+    }
+  })
+  .catch(function(e){
+    alert('❌ Error:\\n'+e.message+'\\n\\nMake sure the admin panel is running.');
+  });
+})();
+  `.trim().replace(/\s+/g, ' ');
+
+  return `javascript:${encodeURIComponent(code)}`;
+}
+
+/**
+ * Session capture script to run in browser console (fallback)
  * This extracts the session data needed for server-side API calls
  */
 export const SESSION_CAPTURE_SCRIPT = `// Run this in the browser console while logged into associate.lexautolease.co.uk
