@@ -3,6 +3,75 @@ import { neon } from "@neondatabase/serverless";
 
 const sql = neon(process.env.DATABASE_URL!);
 
+// Cache for import IDs to avoid repeated lookups
+const importIdCache: Record<string, string> = {};
+
+/**
+ * Get or create a ratebook_imports record for Lex automation quotes
+ * This is needed because provider_rates requires an import_id
+ */
+async function getOrCreateLexAutomationImport(contractType: string): Promise<string | null> {
+  const cacheKey = `lex_automation_${contractType}`;
+
+  // Check cache first
+  if (importIdCache[cacheKey]) {
+    return importIdCache[cacheKey];
+  }
+
+  try {
+    // Look for existing Lex automation import for this contract type
+    const existing = await sql`
+      SELECT id FROM ratebook_imports
+      WHERE provider_code = 'lex'
+        AND contract_type = ${contractType}
+        AND batch_id LIKE 'lex_automation_%'
+        AND is_latest = true
+      ORDER BY created_at DESC
+      LIMIT 1
+    `;
+
+    if (existing.length > 0) {
+      importIdCache[cacheKey] = existing[0].id as string;
+      return importIdCache[cacheKey];
+    }
+
+    // Create new import batch for Lex automation
+    const batchId = `lex_automation_${contractType.toLowerCase()}_${Date.now()}`;
+    const result = await sql`
+      INSERT INTO ratebook_imports (
+        provider_code,
+        contract_type,
+        batch_id,
+        file_name,
+        status,
+        is_latest,
+        created_at,
+        completed_at
+      ) VALUES (
+        'lex',
+        ${contractType},
+        ${batchId},
+        'Lex Automation Quotes',
+        'completed',
+        true,
+        NOW(),
+        NOW()
+      )
+      RETURNING id
+    `;
+
+    if (result.length > 0) {
+      importIdCache[cacheKey] = result[0].id as string;
+      return importIdCache[cacheKey];
+    }
+
+    return null;
+  } catch (error) {
+    console.error("Failed to get/create Lex automation import:", error);
+    return null;
+  }
+}
+
 type QueueItemInput = {
   vehicleId: string;
   capCode: string;
@@ -247,15 +316,35 @@ export async function PATCH(req: NextRequest) {
         WHERE vehicle_id = ${vehicleId}
       `;
 
-      // Check Fleet Marque pricing
-      if (result.brokerOtrp) {
+      // Get queue item details for FM lookup and provider_rates insert
+      const queueItemResult = await sql`
+        SELECT * FROM lex_quote_queue WHERE vehicle_id = ${vehicleId} LIMIT 1
+      `;
+      const queueItem = queueItemResult[0];
+
+      // Check Fleet Marque pricing - try both vehicle_id AND cap_code
+      if (result.brokerOtrp && queueItem) {
         try {
-          const fmResult = await sql`
+          // First try by vehicle_id, then by cap_code
+          let fmResult = await sql`
             SELECT discounted_price, savings
             FROM fleet_marque_terms
             WHERE vehicle_id = ${vehicleId}
             LIMIT 1
           `;
+
+          // If not found by vehicle_id, try by cap_code
+          if (fmResult.length === 0 && queueItem.cap_code) {
+            fmResult = await sql`
+              SELECT discounted_price, savings
+              FROM fleet_marque_terms
+              WHERE cap_code = ${queueItem.cap_code}
+              LIMIT 1
+            `;
+            if (fmResult.length > 0) {
+              console.log(`[FleetMarque] Found by cap_code: ${queueItem.cap_code}`);
+            }
+          }
 
           if (fmResult.length > 0) {
             const fmPrice = fmResult[0].discounted_price as number;
@@ -273,7 +362,7 @@ export async function PATCH(req: NextRequest) {
                 WHERE vehicle_id = ${vehicleId}
               `;
               console.log(
-                `[FleetMarque] Vehicle ${vehicleId}: FM £${(fmPrice / 100).toFixed(2)} vs Lex £${(lexBrokerOtrp / 100).toFixed(2)} - saving £${(savings / 100).toFixed(2)}`
+                `[FleetMarque] Vehicle ${queueItem.manufacturer} ${queueItem.model}: FM £${(fmPrice / 100).toFixed(2)} vs Lex £${(lexBrokerOtrp / 100).toFixed(2)} - saving £${(savings / 100).toFixed(2)}`
               );
             }
           }
@@ -282,14 +371,9 @@ export async function PATCH(req: NextRequest) {
         }
       }
 
-      // Also save to lex_quotes for historical record
-      try {
-        const queueItem = await sql`
-          SELECT * FROM lex_quote_queue WHERE vehicle_id = ${vehicleId} LIMIT 1
-        `;
-
-        if (queueItem.length > 0) {
-          const item = queueItem[0];
+      // Save to lex_quotes for historical record
+      if (queueItem) {
+        try {
           await sql`
             INSERT INTO lex_quotes (
               vehicle_id,
@@ -312,18 +396,18 @@ export async function PATCH(req: NextRequest) {
               status,
               created_at
             ) VALUES (
-              ${item.vehicle_id},
-              ${item.cap_code},
-              ${item.lex_make_code},
-              ${item.lex_model_code},
-              ${item.lex_variant_code},
-              ${item.manufacturer},
-              ${item.model},
-              ${item.variant},
-              ${item.term},
-              ${item.mileage},
-              ${item.payment_plan || "spread_3_down"},
-              ${item.contract_type},
+              ${queueItem.vehicle_id},
+              ${queueItem.cap_code},
+              ${queueItem.lex_make_code},
+              ${queueItem.lex_model_code},
+              ${queueItem.lex_variant_code},
+              ${queueItem.manufacturer},
+              ${queueItem.model},
+              ${queueItem.variant},
+              ${queueItem.term},
+              ${queueItem.mileage},
+              ${queueItem.payment_plan || "spread_3_down"},
+              ${queueItem.contract_type},
               ${monthlyRentalPence},
               ${initialRentalPence},
               ${otrpPence},
@@ -334,11 +418,100 @@ export async function PATCH(req: NextRequest) {
             )
           `;
           console.log(
-            `[DB] Saved quote ${result.quoteId} for ${item.manufacturer} ${item.model}`
+            `[DB] Saved quote ${result.quoteId} for ${queueItem.manufacturer} ${queueItem.model}`
           );
+        } catch (dbError) {
+          console.error("Failed to save quote to lex_quotes:", dbError);
         }
-      } catch (dbError) {
-        console.error("Failed to save quote to lex_quotes:", dbError);
+      }
+
+      // Update or insert into provider_rates
+      if (queueItem && monthlyRentalPence) {
+        try {
+          const paymentPlan = queueItem.payment_plan || "spread_3_down";
+
+          // Check if rate already exists with same parameters
+          const existingRate = await sql`
+            SELECT id, total_rental
+            FROM provider_rates
+            WHERE provider_code = 'lex'
+              AND vehicle_id = ${queueItem.vehicle_id}
+              AND term = ${queueItem.term}
+              AND annual_mileage = ${queueItem.mileage}
+              AND payment_plan = ${paymentPlan}
+              AND contract_type = ${queueItem.contract_type}
+            LIMIT 1
+          `;
+
+          if (existingRate.length > 0) {
+            // Rate exists - check if price is different
+            const existingPrice = existingRate[0].total_rental;
+            if (existingPrice !== monthlyRentalPence) {
+              // Price changed - update the rate
+              await sql`
+                UPDATE provider_rates
+                SET
+                  total_rental = ${monthlyRentalPence},
+                  p11d = ${otrpPence},
+                  updated_at = NOW()
+                WHERE id = ${existingRate[0].id}
+              `;
+              console.log(
+                `[ProviderRates] Updated rate for ${queueItem.manufacturer} ${queueItem.model}: £${(existingPrice / 100).toFixed(2)} → £${(monthlyRentalPence / 100).toFixed(2)}`
+              );
+            } else {
+              console.log(
+                `[ProviderRates] Rate unchanged for ${queueItem.manufacturer} ${queueItem.model}: £${(monthlyRentalPence / 100).toFixed(2)}`
+              );
+            }
+          } else {
+            // Rate doesn't exist - need to get or create an import batch for Lex automation
+            let importId = await getOrCreateLexAutomationImport(queueItem.contract_type);
+
+            if (importId) {
+              await sql`
+                INSERT INTO provider_rates (
+                  cap_code,
+                  vehicle_id,
+                  import_id,
+                  provider_code,
+                  contract_type,
+                  manufacturer,
+                  model,
+                  variant,
+                  term,
+                  annual_mileage,
+                  payment_plan,
+                  total_rental,
+                  p11d,
+                  created_at,
+                  updated_at
+                ) VALUES (
+                  ${queueItem.cap_code},
+                  ${queueItem.vehicle_id},
+                  ${importId},
+                  'lex',
+                  ${queueItem.contract_type},
+                  ${queueItem.manufacturer},
+                  ${queueItem.model},
+                  ${queueItem.variant},
+                  ${queueItem.term},
+                  ${queueItem.mileage},
+                  ${paymentPlan},
+                  ${monthlyRentalPence},
+                  ${otrpPence},
+                  NOW(),
+                  NOW()
+                )
+              `;
+              console.log(
+                `[ProviderRates] Inserted new rate for ${queueItem.manufacturer} ${queueItem.model}: £${(monthlyRentalPence / 100).toFixed(2)}`
+              );
+            }
+          }
+        } catch (prError) {
+          console.error("Failed to update provider_rates:", prError);
+        }
       }
     }
 

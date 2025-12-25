@@ -6,6 +6,159 @@
 // Store for intercepted API responses
 let lastQuoteResponse = null;
 
+// Modal dialog auto-dismiss poller
+let modalPollerInterval = null;
+
+function startModalPoller() {
+  if (modalPollerInterval) return; // Already running
+
+  console.log('[LexAuto] Starting modal auto-dismiss poller...');
+
+  modalPollerInterval = setInterval(() => {
+    // Look for various types of modal dialogs and click OK/Close buttons
+
+    // FIRST: Check for the specific Lex website alert (white box with OK button)
+    // These dialogs often have a title like "associate.lexautolease.co.uk says"
+    // and appear as a white box in the center of the page
+
+    // Look for any visible element that contains "OK" button and looks like an alert
+    // Check ALL clickable elements: a, button, input, div with onclick
+    const clickables = document.querySelectorAll('a, button, input[type="button"], input[type="submit"], [onclick]');
+
+    for (const el of clickables) {
+      const text = (el.textContent || el.value || '').trim();
+      if (text === 'OK' || text === 'Ok' || text === 'ok') {
+        // Check if this element is visible and clickable
+        const rect = el.getBoundingClientRect();
+        if (rect.width > 0 && rect.height > 0 && rect.top > 0 && rect.top < window.innerHeight) {
+          const style = window.getComputedStyle(el);
+          if (style.display !== 'none' && style.visibility !== 'hidden') {
+            // Check if it has a colored background (like the pink OK button in Lex alerts)
+            const bgColor = style.backgroundColor;
+            const hasBgColor = bgColor && bgColor !== 'rgba(0, 0, 0, 0)' && bgColor !== 'transparent';
+
+            // Check if parent looks like a dialog (white background, centered)
+            const parent = el.closest('div');
+            const parentRect = parent ? parent.getBoundingClientRect() : null;
+            const isCentered = parentRect && parentRect.left > 100 && parentRect.right < window.innerWidth - 100;
+
+            if (hasBgColor || isCentered) {
+              console.log('[LexAuto] Found alert OK button, clicking:', el.tagName, text, 'bg:', bgColor);
+              el.click();
+              return;
+            }
+          }
+        }
+      }
+    }
+
+    // Also look for SweetAlert2 or similar library dialogs
+    const sweetAlertBtn = document.querySelector('.swal2-confirm, .sweet-alert button.confirm, .alertify .ajs-ok');
+    if (sweetAlertBtn) {
+      console.log('[LexAuto] Found SweetAlert/Alertify OK button, clicking...');
+      sweetAlertBtn.click();
+      return;
+    }
+
+    // Check for jAlert or custom Lex alert implementations
+    const jAlertOk = document.querySelector('.jalert-ok, .jalert .ok, #jalert_ok, .alert-ok');
+    if (jAlertOk) {
+      console.log('[LexAuto] Found jAlert OK button, clicking...');
+      jAlertOk.click();
+      return;
+    }
+
+    // Generic modal OK buttons (common patterns)
+    const okButtons = [
+      // Standard Bootstrap/jQuery modals
+      '.modal.show .btn-primary',
+      '.modal.show .btn-ok',
+      '.modal.show button:contains("OK")',
+      '.modal-dialog .btn-primary',
+
+      // jQuery UI dialogs
+      '.ui-dialog .ui-dialog-buttonset button:first-child',
+      '.ui-dialog-buttonpane button',
+
+      // Custom alert dialogs - look for visible OK buttons
+      'div[class*="alert"] button',
+      'div[class*="modal"] button',
+      'div[class*="dialog"] button',
+      'div[class*="popup"] button',
+
+      // Specific button text matches
+      'button.ok',
+      'input[type="button"][value="OK"]',
+      'input[type="button"][value="Ok"]',
+      'a.btn:contains("OK")',
+
+      // The WLTP specific one we already handle
+      '#wltpCalcbtnOk'
+    ];
+
+    // Also check for any visible button with OK text
+    const allButtons = document.querySelectorAll('button, input[type="button"], a.btn, .btn');
+
+    for (const btn of allButtons) {
+      // Check if button is visible
+      if (!btn.offsetParent && btn.style.display !== 'block') continue;
+
+      const text = (btn.textContent || btn.value || '').trim().toLowerCase();
+      const isOkButton = text === 'ok' || text === 'okay' || text === 'yes' || text === 'accept' || text === 'confirm';
+
+      if (isOkButton) {
+        // Check if it's inside a modal/alert/dialog container that's visible
+        const container = btn.closest('.modal, .dialog, .alert, .popup, [class*="modal"], [class*="dialog"], [class*="alert"], [role="dialog"], [role="alertdialog"]');
+
+        // Or check if there's a semi-transparent overlay indicating a modal
+        const hasOverlay = document.querySelector('.modal-backdrop, .overlay, [class*="overlay"], [class*="backdrop"]');
+
+        // Or just check if the button looks like it's in a floating element
+        const rect = btn.getBoundingClientRect();
+        const isFloating = rect.top > 50 && rect.left > 50 && rect.right < window.innerWidth - 50;
+
+        if (container || hasOverlay || isFloating) {
+          console.log('[LexAuto] Auto-dismissing modal dialog, clicking:', btn.textContent || btn.value);
+          btn.click();
+          return; // Only click one at a time
+        }
+      }
+    }
+
+    // Also look for the specific Lex VED alert which appears as a centered dialog
+    // Check for any element that looks like a modal overlay with an OK button
+    const suspiciousDialogs = document.querySelectorAll('div');
+    for (const div of suspiciousDialogs) {
+      const style = window.getComputedStyle(div);
+      const isFixed = style.position === 'fixed';
+      const isAbsolute = style.position === 'absolute';
+      const hasHighZIndex = parseInt(style.zIndex) > 1000;
+      const isVisible = div.offsetParent !== null || style.display !== 'none';
+
+      if ((isFixed || (isAbsolute && hasHighZIndex)) && isVisible) {
+        // Look for OK button inside
+        const okBtn = div.querySelector('button, input[type="button"], a');
+        if (okBtn) {
+          const btnText = (okBtn.textContent || okBtn.value || '').trim().toLowerCase();
+          if (btnText === 'ok' || btnText === 'okay' || btnText === 'yes') {
+            console.log('[LexAuto] Found floating dialog with OK button, clicking...');
+            okBtn.click();
+            return;
+          }
+        }
+      }
+    }
+  }, 500); // Check every 500ms
+}
+
+function stopModalPoller() {
+  if (modalPollerInterval) {
+    clearInterval(modalPollerInterval);
+    modalPollerInterval = null;
+    console.log('[LexAuto] Stopped modal auto-dismiss poller');
+  }
+}
+
 // Inject alert override IMMEDIATELY (before page scripts run)
 (function injectAlertOverride() {
   const script = document.createElement('script');
@@ -296,6 +449,9 @@ function logAvailableOptions(selectEl, label) {
 async function runQuote({ makeId, modelId, variantId, term, mileage, contractType, paymentPlan, co2, customOtrp }) {
   console.log('[LexAuto] Starting quote automation:', { makeId, modelId, variantId, term, mileage, co2, customOtrp });
 
+  // Start modal poller to auto-dismiss any alert dialogs
+  startModalPoller();
+
   try {
     // Step 1: Select manufacturer
     const manufacturerSelect = await waitForElement('#selManufacturers');
@@ -546,6 +702,9 @@ async function runQuote({ makeId, modelId, variantId, term, mileage, contractTyp
     const result = await extractQuoteResult();
     console.log('[LexAuto] Quote completed:', result);
 
+    // Stop modal poller
+    stopModalPoller();
+
     return {
       success: true,
       ...result,
@@ -555,6 +714,8 @@ async function runQuote({ makeId, modelId, variantId, term, mileage, contractTyp
 
   } catch (error) {
     console.error('[LexAuto] Quote automation failed:', error);
+    // Stop modal poller on error too
+    stopModalPoller();
     throw error;
   }
 }
