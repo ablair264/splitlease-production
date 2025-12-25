@@ -62,8 +62,9 @@ async function proxyToRailway(
 
 export async function GET(request: NextRequest) {
   const session = await auth();
+  console.log("[lex-playwright] Session:", JSON.stringify(session, null, 2));
   if (!session?.user?.id) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return NextResponse.json({ error: "Unauthorized", debug: { hasSession: !!session, hasUser: !!session?.user } }, { status: 401 });
   }
 
   const { searchParams } = new URL(request.url);
