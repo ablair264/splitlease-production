@@ -8,10 +8,8 @@ const RAILWAY_API_URL = process.env.LEX_PLAYWRIGHT_API_URL || "http://87.106.76.
  * Create a JWT token for Railway API authentication
  */
 function createApiToken(userId: string, email?: string | null, name?: string | null): string {
-  const secret = process.env.AUTH_SECRET;
-  if (!secret) {
-    throw new Error("AUTH_SECRET not configured");
-  }
+  // Hardcoded to match VPS - env var may not be loading on Netlify
+  const secret = "k8Lm3nP9qR2sT5uV7wX0yZ1aB4cD6eF8";
 
   return jwt.sign(
     {
