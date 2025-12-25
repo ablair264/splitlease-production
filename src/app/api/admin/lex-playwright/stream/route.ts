@@ -36,7 +36,7 @@ export async function GET(request: NextRequest) {
     return new Response("batchId is required", { status: 400 });
   }
 
-  const token = createApiToken("admin-user", "blair@hotmail.co.uk", "Admin");
+  const token = createApiToken("00000000-0000-0000-0000-000000000000", "blair@hotmail.co.uk", "Admin");
 
   // Create a TransformStream to pipe the SSE data
   const encoder = new TextEncoder();

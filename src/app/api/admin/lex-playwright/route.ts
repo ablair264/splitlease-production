@@ -88,7 +88,7 @@ export async function GET(request: NextRequest) {
     const response = await proxyToRailway(
       path,
       "GET",
-      "admin-user",
+      "00000000-0000-0000-0000-000000000000",
       "blair@hotmail.co.uk",
       "Admin"
     );
@@ -123,7 +123,7 @@ export async function POST(request: NextRequest) {
     const response = await proxyToRailway(
       path,
       "POST",
-      "admin-user",
+      "00000000-0000-0000-0000-000000000000",
       "blair@hotmail.co.uk",
       "Admin",
       data
