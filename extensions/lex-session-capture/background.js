@@ -164,7 +164,14 @@ async function runQuoteFromBrowser({ makeId, modelId, variantId, term, mileage, 
     throw new Error('No session captured. Please capture session first.');
   }
 
-  const { csrfToken } = sessionData;
+  const { csrfToken, cookies } = sessionData;
+
+  // Headers for all Lex API requests - must include cookies manually in service worker
+  const lexHeaders = {
+    'Content-Type': 'application/json; charset=utf-8',
+    'x-csrf-check': csrfToken,
+    'Cookie': cookies
+  };
 
   // Step 1: Get variant details
   const variantPayload = {
@@ -173,15 +180,11 @@ async function runQuoteFromBrowser({ makeId, modelId, variantId, term, mileage, 
     variant: variantId
   };
   console.log('GetVariant request:', variantPayload);
-  console.log('CSRF token:', csrfToken);
+  console.log('Using cookies:', cookies ? 'yes (' + cookies.length + ' chars)' : 'NO COOKIES');
 
   const variantResponse = await fetch(`${LEX_URL}/services/Quote.svc/GetVariant`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json; charset=utf-8',
-      'x-csrf-check': csrfToken
-    },
-    credentials: 'include',
+    headers: lexHeaders,
     body: JSON.stringify(variantPayload)
   });
 
@@ -219,11 +222,7 @@ async function runQuoteFromBrowser({ makeId, modelId, variantId, term, mileage, 
 
   const quoteResponse = await fetch(`${LEX_URL}/services/Quote.svc/CalculateQuote`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json; charset=utf-8',
-      'x-csrf-check': csrfToken
-    },
-    credentials: 'include',
+    headers: lexHeaders,
     body: JSON.stringify(quotePayload)
   });
 
@@ -238,11 +237,7 @@ async function runQuoteFromBrowser({ makeId, modelId, variantId, term, mileage, 
   // Step 3: Get quote line details
   const lineResponse = await fetch(`${LEX_URL}/services/Quote.svc/GetQuoteLine`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json; charset=utf-8',
-      'x-csrf-check': csrfToken
-    },
-    credentials: 'include',
+    headers: lexHeaders,
     body: JSON.stringify({
       QuoteId: quoteData.QuoteId || quoteData.quoteId
     })
