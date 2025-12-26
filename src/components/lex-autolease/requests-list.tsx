@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from "react";
 import { Trash2, Clock, CheckCircle, XCircle, Loader2, Car } from "lucide-react";
-import { apiFetch } from "@/lib/utils";
 
 type Request = {
   id: string;
@@ -34,7 +33,7 @@ export function RequestsList({ refreshTrigger, onRequestDeleted }: RequestsListP
   const fetchRequests = async () => {
     setLoading(true);
     try {
-      const response = await apiFetch("/api/lex-autolease/requests");
+      const response = await fetch("/api/lex-autolease/requests");
       const data = await response.json();
       setRequests(data.requests || []);
     } catch (err) {
@@ -52,7 +51,7 @@ export function RequestsList({ refreshTrigger, onRequestDeleted }: RequestsListP
     if (!confirm("Delete this request batch and all associated quotes?")) return;
     setDeleting(batchId);
     try {
-      await apiFetch("/api/lex-autolease/requests", {
+      await fetch("/api/lex-autolease/requests", {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ batchId })

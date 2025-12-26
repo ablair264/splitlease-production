@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { DrivaliaQuoteRunner } from "@/components/drivalia/quote-runner";
+import { DrivaliaQuoteHistory } from "@/components/drivalia/quote-history";
 import { Car, PlayCircle, History, BookOpen } from "lucide-react";
 
 type Tab = "run" | "history" | "guide";
@@ -63,12 +64,7 @@ export default function DrivaliaPage() {
       )}
 
       {activeTab === "history" && (
-        <div
-          className="p-8 rounded-xl border text-center"
-          style={{ background: "rgba(26, 31, 42, 0.6)", borderColor: "rgba(255, 255, 255, 0.1)" }}
-        >
-          <p className="text-white/50">Quote history coming soon...</p>
-        </div>
+        <DrivaliaQuoteHistory refreshTrigger={refreshKey} />
       )}
 
       {activeTab === "guide" && (

@@ -391,6 +391,53 @@ export type LexVehicleSelection = {
   vehicleId?: string;
 };
 
+// Drivalia quotes (for browser extension automation)
+export const drivaliaQuotes = pgTable("drivalia_quotes", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  vehicleId: uuid("vehicle_id").references(() => vehicles.id, { onDelete: "set null" }),
+  capCode: text("cap_code"),
+  manufacturer: text("manufacturer").notNull(),
+  model: text("model").notNull(),
+  variant: text("variant"),
+  term: integer("term").notNull(),
+  annualMileage: integer("annual_mileage").notNull(),
+  contractType: text("contract_type").notNull(),
+  status: text("status").notNull().default("pending"), // pending, running, complete, error
+  monthlyRental: integer("monthly_rental"), // Result in pence
+  initialRental: integer("initial_rental"), // Result in pence
+  quoteReference: text("quote_reference"),
+  error: text("error"),
+  rawResponse: jsonb("raw_response").$type<Record<string, unknown>>(),
+  batchId: text("batch_id"), // Group quotes by batch
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  batchIdx: index("idx_drivalia_quotes_batch").on(table.batchId),
+  statusIdx: index("idx_drivalia_quotes_status").on(table.status),
+  createdIdx: index("idx_drivalia_quotes_created").on(table.createdAt),
+}));
+
+export type DrivaliaQuote = {
+  id: string;
+  vehicleId: string | null;
+  capCode: string | null;
+  manufacturer: string;
+  model: string;
+  variant: string | null;
+  term: number;
+  annualMileage: number;
+  contractType: string;
+  status: "pending" | "running" | "complete" | "error";
+  monthlyRental: number | null;
+  initialRental: number | null;
+  quoteReference: string | null;
+  error: string | null;
+  rawResponse: Record<string, unknown> | null;
+  batchId: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
 // Provider column mappings for flexible uploads
 export const providerMappings = pgTable("provider_mappings", {
   id: uuid("id").primaryKey().defaultRandom(),
