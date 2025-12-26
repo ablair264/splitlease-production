@@ -10,10 +10,12 @@ import {
   XCircle,
   AlertCircle,
   RefreshCw,
+  Sparkles,
 } from "lucide-react";
 import { getApiBaseUrl } from "@/lib/utils";
+import ColumnMappingModal from "@/components/admin/ColumnMappingModal";
 
-type UploadTab = "venus" | "ratebook";
+type UploadTab = "venus" | "ratebook" | "smart";
 
 interface VenusImportResult {
   success: boolean;
@@ -43,8 +45,9 @@ const CONTRACT_TYPES = [
 ];
 
 const PROVIDERS = [
-  { value: "lex", label: "Lex Autolease" },
-  { value: "ogilvie", label: "Ogilvie Fleet" },
+  { value: "lex", label: "Lex Autolease", accepts: ".csv" },
+  { value: "ald", label: "ALD Automotive", accepts: ".csv,.xlsx,.xls" },
+  { value: "ogilvie", label: "Ogilvie Fleet", accepts: ".csv" },
 ];
 
 export default function UploaderPage() {
@@ -64,6 +67,19 @@ export default function UploaderPage() {
   const [ratebookError, setRatebookError] = useState<string | null>(null);
   const [ratebookResult, setRatebookResult] = useState<RatebookImportResult | null>(null);
   const ratebookFileInputRef = useRef<HTMLInputElement>(null);
+
+  // Smart import state (AI-powered column mapping)
+  const [smartFile, setSmartFile] = useState<File | null>(null);
+  const [smartContractType, setSmartContractType] = useState("");
+  const [smartIsExtracting, setSmartIsExtracting] = useState(false);
+  const [smartIsUploading, setSmartIsUploading] = useState(false);
+  const [smartHeaders, setSmartHeaders] = useState<string[]>([]);
+  const [smartSampleRows, setSmartSampleRows] = useState<Record<string, string>[]>([]);
+  const [smartShowMapping, setSmartShowMapping] = useState(false);
+  const [smartError, setSmartError] = useState<string | null>(null);
+  const [smartResult, setSmartResult] = useState<RatebookImportResult | null>(null);
+  const [smartFileContent, setSmartFileContent] = useState<string>("");
+  const smartFileInputRef = useRef<HTMLInputElement>(null);
 
   // Venus handlers
   const handleVenusDragOver = useCallback((e: React.DragEvent) => {
@@ -155,12 +171,24 @@ export default function UploaderPage() {
     setVenusResult(null);
   };
 
+  // Get the currently selected provider config
+  const selectedProvider = PROVIDERS.find(p => p.value === ratebookProvider);
+  const acceptedFormats = selectedProvider?.accepts || ".csv";
+
   // Ratebook handlers
   const handleRatebookFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
     if (selectedFile) {
-      if (!selectedFile.name.endsWith(".csv")) {
-        setRatebookError("Please select a CSV file");
+      const fileName = selectedFile.name.toLowerCase();
+      const isCSV = fileName.endsWith(".csv");
+      const isXLSX = fileName.endsWith(".xlsx") || fileName.endsWith(".xls");
+
+      // Check if the file type is valid for the selected provider
+      const validFormats = acceptedFormats.split(",");
+      const isValidFormat = validFormats.some(fmt => fileName.endsWith(fmt.trim()));
+
+      if (!isValidFormat) {
+        setRatebookError(`Please select a ${acceptedFormats.replace(/\./g, "").toUpperCase()} file`);
         return;
       }
       setRatebookFile(selectedFile);
@@ -180,21 +208,43 @@ export default function UploaderPage() {
     setRatebookResult(null);
 
     try {
-      const csvContent = await ratebookFile.text();
-
-      // Use splitlease-api on Railway for imports
       const apiBase = getApiBaseUrl();
-      const queryParams = new URLSearchParams({
-        fileName: ratebookFile.name,
-        contractType: ratebookContractType,
-        providerCode: ratebookProvider,
-      });
+      const isXLSX = ratebookFile.name.toLowerCase().endsWith(".xlsx") || ratebookFile.name.toLowerCase().endsWith(".xls");
 
-      const res = await fetch(`${apiBase}/api/admin/ratebooks/import-stream?${queryParams}`, {
-        method: "POST",
-        headers: { "Content-Type": "text/plain" },
-        body: csvContent,
-      });
+      let res;
+      if (isXLSX) {
+        // For XLSX files, read as base64 and send via JSON body
+        const arrayBuffer = await ratebookFile.arrayBuffer();
+        const base64Content = btoa(
+          new Uint8Array(arrayBuffer).reduce((data, byte) => data + String.fromCharCode(byte), "")
+        );
+
+        res = await fetch(`${apiBase}/api/admin/ratebooks/import`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            fileName: ratebookFile.name,
+            contractType: ratebookContractType,
+            providerCode: ratebookProvider,
+            fileContent: base64Content, // base64 encoded XLSX
+          }),
+        });
+      } else {
+        // For CSV files, use the stream endpoint
+        const csvContent = await ratebookFile.text();
+
+        const queryParams = new URLSearchParams({
+          fileName: ratebookFile.name,
+          contractType: ratebookContractType,
+          providerCode: ratebookProvider,
+        });
+
+        res = await fetch(`${apiBase}/api/admin/ratebooks/import-stream?${queryParams}`, {
+          method: "POST",
+          headers: { "Content-Type": "text/plain" },
+          body: csvContent,
+        });
+      }
 
       const data = await res.json();
 
@@ -205,7 +255,11 @@ export default function UploaderPage() {
 
       setRatebookResult({
         success: data.success,
-        stats: data.stats,
+        stats: {
+          totalRows: data.totalRows || data.stats?.totalRows || 0,
+          successRows: data.successRows || data.stats?.successRows || 0,
+          errorRows: data.errorRows || data.stats?.errorRows || 0,
+        },
         errors: data.errors,
       });
     } catch (err) {
@@ -221,6 +275,143 @@ export default function UploaderPage() {
     setRatebookFile(null);
     setRatebookError(null);
     setRatebookResult(null);
+  };
+
+  // Smart import handlers
+  const handleSmartFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFile = e.target.files?.[0];
+    if (!selectedFile) return;
+
+    const fileName = selectedFile.name.toLowerCase();
+    if (!fileName.endsWith(".csv") && !fileName.endsWith(".xlsx") && !fileName.endsWith(".xls")) {
+      setSmartError("Please select a CSV or XLSX file");
+      return;
+    }
+
+    setSmartFile(selectedFile);
+    setSmartError(null);
+    setSmartResult(null);
+
+    // Read file content
+    const isXLSX = fileName.endsWith(".xlsx") || fileName.endsWith(".xls");
+    let fileContentStr: string;
+
+    if (isXLSX) {
+      const arrayBuffer = await selectedFile.arrayBuffer();
+      fileContentStr = btoa(
+        new Uint8Array(arrayBuffer).reduce((data, byte) => data + String.fromCharCode(byte), "")
+      );
+    } else {
+      fileContentStr = await selectedFile.text();
+    }
+
+    setSmartFileContent(fileContentStr);
+
+    // Extract headers
+    setSmartIsExtracting(true);
+    try {
+      const apiBase = getApiBaseUrl();
+      const response = await fetch(`${apiBase}/api/admin/providers/extract-headers`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fileContent: fileContentStr,
+          fileName: selectedFile.name,
+          isBase64: isXLSX,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to extract headers");
+      }
+
+      const data = await response.json();
+      setSmartHeaders(data.headers);
+      setSmartSampleRows(data.sampleRows);
+      setSmartShowMapping(true);
+    } catch (err) {
+      setSmartError(err instanceof Error ? err.message : "Failed to extract headers");
+    } finally {
+      setSmartIsExtracting(false);
+    }
+  };
+
+  const handleSmartMappingConfirm = async (
+    mappings: Record<string, string | null>,
+    providerName: string,
+    saveConfig: boolean
+  ) => {
+    if (!smartFile || !smartContractType) {
+      setSmartError("Please select a contract type");
+      return;
+    }
+
+    setSmartShowMapping(false);
+    setSmartIsUploading(true);
+    setSmartError(null);
+
+    try {
+      const apiBase = getApiBaseUrl();
+      const providerCode = providerName.toLowerCase().replace(/[^a-z0-9]/g, "_");
+
+      // Save provider configuration if requested
+      if (saveConfig) {
+        await fetch(`${apiBase}/api/admin/providers`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            providerName,
+            columnMappings: mappings,
+            fileFormat: smartFile.name.toLowerCase().endsWith(".csv") ? "csv" : "xlsx",
+          }),
+        });
+      }
+
+      // Import with mappings
+      const response = await fetch(`${apiBase}/api/admin/ratebooks/import-with-mappings`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fileName: smartFile.name,
+          contractType: smartContractType,
+          fileContent: smartFileContent,
+          providerCode,
+          columnMappings: mappings,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        setSmartError(data.error || "Upload failed");
+        return;
+      }
+
+      setSmartResult({
+        success: data.success,
+        stats: {
+          totalRows: data.totalRows || 0,
+          successRows: data.successRows || 0,
+          errorRows: data.errorRows || 0,
+        },
+        errors: data.errors,
+      });
+    } catch (err) {
+      setSmartError(err instanceof Error ? err.message : "Upload failed");
+    } finally {
+      setSmartIsUploading(false);
+    }
+  };
+
+  const handleSmartReset = () => {
+    setSmartFile(null);
+    setSmartContractType("");
+    setSmartHeaders([]);
+    setSmartSampleRows([]);
+    setSmartShowMapping(false);
+    setSmartError(null);
+    setSmartResult(null);
+    setSmartFileContent("");
   };
 
   return (
@@ -257,6 +448,16 @@ export default function UploaderPage() {
         >
           <FileText className="w-4 h-4" />
           CSV Ratebook
+        </button>
+        <button
+          onClick={() => setActiveTab("smart")}
+          className={`px-6 py-2.5 rounded-md text-sm font-medium transition-all flex items-center gap-2 ${
+            activeTab === "smart" ? "text-white" : "text-white/60 hover:text-white"
+          }`}
+          style={activeTab === "smart" ? { background: "linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%)" } : {}}
+        >
+          <Sparkles className="w-4 h-4" />
+          Smart Import
         </button>
       </div>
 
@@ -469,7 +670,7 @@ export default function UploaderPage() {
               </div>
             )}
           </>
-        ) : (
+        ) : activeTab === "ratebook" ? (
           /* Ratebook Upload Tab */
           <div className="max-w-lg mx-auto space-y-6">
             {!ratebookResult?.success ? (
@@ -518,7 +719,9 @@ export default function UploaderPage() {
 
                 {/* File Input */}
                 <div>
-                  <label className="block text-sm text-white/60 mb-1.5">CSV File</label>
+                  <label className="block text-sm text-white/60 mb-1.5">
+                    Ratebook File {ratebookProvider === "ald" && "(CSV or XLSX)"}
+                  </label>
                   <div
                     className="relative rounded-lg cursor-pointer hover:border-cyan-500/50 transition-colors"
                     style={{
@@ -530,7 +733,7 @@ export default function UploaderPage() {
                     <input
                       ref={ratebookFileInputRef}
                       type="file"
-                      accept=".csv"
+                      accept={acceptedFormats}
                       onChange={handleRatebookFileChange}
                       className="hidden"
                     />
@@ -543,7 +746,9 @@ export default function UploaderPage() {
                       ) : (
                         <div className="text-white/40">
                           <Upload className="w-8 h-8 mx-auto mb-2" />
-                          <span className="text-sm">Click to select CSV file</span>
+                          <span className="text-sm">
+                            Click to select {ratebookProvider === "ald" ? "CSV or XLSX" : "CSV"} file
+                          </span>
                         </div>
                       )}
                     </div>
@@ -631,8 +836,163 @@ export default function UploaderPage() {
               </div>
             )}
           </div>
-        )}
+        ) : activeTab === "smart" ? (
+          /* Smart Import Tab - AI-powered column mapping */
+          <div className="max-w-lg mx-auto space-y-6">
+            {!smartResult?.success ? (
+              <>
+                {/* Description */}
+                <div className="p-4 rounded-lg bg-gradient-to-r from-purple-500/10 to-indigo-500/10 border border-purple-500/20">
+                  <div className="flex items-start gap-3">
+                    <Sparkles className="w-5 h-5 text-purple-400 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <h3 className="text-sm font-medium text-purple-300">AI-Powered Import</h3>
+                      <p className="text-sm text-white/50 mt-1">
+                        Upload any ratebook and our AI will automatically detect column mappings.
+                        Works with any provider&apos;s file format.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Contract Type Select */}
+                <div>
+                  <label className="block text-sm text-white/60 mb-1.5">Contract Type</label>
+                  <select
+                    value={smartContractType}
+                    onChange={(e) => setSmartContractType(e.target.value)}
+                    className="w-full px-3 py-2.5 rounded-lg text-white text-sm"
+                    style={{
+                      background: "rgba(26, 31, 42, 0.8)",
+                      border: "1px solid rgba(255, 255, 255, 0.1)",
+                    }}
+                  >
+                    <option value="">Select contract type...</option>
+                    {CONTRACT_TYPES.map((ct) => (
+                      <option key={ct.value} value={ct.value}>
+                        {ct.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* File Input */}
+                <div>
+                  <label className="block text-sm text-white/60 mb-1.5">Ratebook File (CSV or XLSX)</label>
+                  <div
+                    className="relative rounded-lg cursor-pointer hover:border-purple-500/50 transition-colors"
+                    style={{
+                      background: "rgba(26, 31, 42, 0.8)",
+                      border: "1px dashed rgba(139, 92, 246, 0.3)",
+                    }}
+                    onClick={() => smartFileInputRef.current?.click()}
+                  >
+                    <input
+                      ref={smartFileInputRef}
+                      type="file"
+                      accept=".csv,.xlsx,.xls"
+                      onChange={handleSmartFileChange}
+                      className="hidden"
+                      disabled={smartIsExtracting || smartIsUploading}
+                    />
+                    <div className="px-4 py-8 text-center">
+                      {smartFile ? (
+                        <div className="flex items-center justify-center gap-2 text-purple-400">
+                          <CheckCircle className="w-5 h-5" />
+                          <span className="text-sm">{smartFile.name}</span>
+                        </div>
+                      ) : smartIsExtracting ? (
+                        <div className="flex items-center justify-center gap-2 text-purple-400">
+                          <Loader2 className="w-5 h-5 animate-spin" />
+                          <span className="text-sm">Analyzing file...</span>
+                        </div>
+                      ) : (
+                        <div className="text-white/40">
+                          <Upload className="w-8 h-8 mx-auto mb-2" />
+                          <span className="text-sm">Click to select any ratebook file</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Error */}
+                {smartError && (
+                  <div
+                    className="px-4 py-3 rounded-lg text-sm text-red-400 flex items-center gap-2"
+                    style={{ background: "rgba(239, 68, 68, 0.1)" }}
+                  >
+                    <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                    {smartError}
+                  </div>
+                )}
+
+                {/* Status */}
+                {smartIsUploading && (
+                  <div className="flex items-center justify-center gap-2 py-4 text-purple-400">
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                    <span className="text-sm">Importing ratebook...</span>
+                  </div>
+                )}
+              </>
+            ) : (
+              /* Smart Result Display */
+              <div className="space-y-6">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-xl bg-green-500/20 flex items-center justify-center">
+                    <CheckCircle className="w-6 h-6 text-green-400" />
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-medium text-green-400">Import Successful</h2>
+                    <p className="text-sm text-white/60">Ratebook has been imported with custom mappings</p>
+                  </div>
+                </div>
+
+                {smartResult.stats && (
+                  <div className="grid grid-cols-3 gap-4">
+                    <div className="p-4 rounded-lg bg-white/5 border border-white/10 text-center">
+                      <p className="text-2xl font-bold text-white">{smartResult.stats.totalRows.toLocaleString()}</p>
+                      <p className="text-xs text-white/50 mt-1">Total Rows</p>
+                    </div>
+                    <div className="p-4 rounded-lg bg-white/5 border border-white/10 text-center">
+                      <p className="text-2xl font-bold text-green-400">{smartResult.stats.successRows.toLocaleString()}</p>
+                      <p className="text-xs text-white/50 mt-1">Success</p>
+                    </div>
+                    <div className="p-4 rounded-lg bg-white/5 border border-white/10 text-center">
+                      <p className="text-2xl font-bold text-red-400">{smartResult.stats.errorRows}</p>
+                      <p className="text-xs text-white/50 mt-1">Errors</p>
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex justify-center">
+                  <button
+                    onClick={handleSmartReset}
+                    className="px-6 py-3 rounded-lg text-sm font-medium text-white flex items-center gap-2 transition-all"
+                    style={{
+                      background: "rgba(255, 255, 255, 0.1)",
+                      border: "1px solid rgba(255, 255, 255, 0.2)",
+                    }}
+                  >
+                    <RefreshCw className="w-4 h-4" />
+                    Upload Another File
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        ) : null}
       </div>
+
+      {/* Column Mapping Modal */}
+      <ColumnMappingModal
+        isOpen={smartShowMapping}
+        onClose={() => setSmartShowMapping(false)}
+        onConfirm={handleSmartMappingConfirm}
+        fileName={smartFile?.name || ""}
+        headers={smartHeaders}
+        sampleRows={smartSampleRows}
+      />
     </div>
   );
 }
