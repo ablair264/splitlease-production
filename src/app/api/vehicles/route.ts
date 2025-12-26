@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
 
     // Filters
     const search = searchParams.get("search");
-    const manufacturer = searchParams.get("manufacturer");
+    const manufacturer = searchParams.get("manufacturer") || searchParams.get("make");
     const fuelType = searchParams.get("fuelType");
     const bodyType = searchParams.get("bodyType");
     const transmission = searchParams.get("transmission");
@@ -109,17 +109,29 @@ export async function GET(request: NextRequest) {
 
     const totalCount = countResult[0]?.count || 0;
 
+    // Get unique manufacturers for the makes dropdown
+    const makesResult = await db
+      .selectDistinct({ manufacturer: vehicles.manufacturer })
+      .from(vehicles)
+      .orderBy(asc(vehicles.manufacturer));
+    const makes = makesResult.map(m => m.manufacturer);
+
     // Transform data for frontend
     const transformedVehicles = vehiclesWithPricing.map((v) => ({
       id: v.id,
+      capCode: v.capCode,
       manufacturer: v.manufacturer,
       model: v.model,
+      variant: v.variant || "",
       derivative: v.variant || "",
+      modelYear: v.modelYear || "",
       fuelType: v.fuelType || "Unknown",
       bodyType: v.bodyStyle || "Unknown",
+      bodyStyle: v.bodyStyle || "Unknown",
       transmission: v.transmission || "Unknown",
       engineSize: v.engineSize ? `${v.engineSize}cc` : undefined,
-      co2: v.co2 || undefined,
+      co2: v.co2 || 0,
+      p11d: v.p11d || 0,
       mpg: v.mpg ? parseFloat(v.mpg) : undefined,
       doors: v.doors || undefined,
       imageFolder: v.imageFolder || undefined,
@@ -132,6 +144,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       vehicles: transformedVehicles,
+      makes,
       pagination: {
         page,
         limit,
