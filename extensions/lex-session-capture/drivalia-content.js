@@ -7,7 +7,7 @@ console.log('[Drivalia] Content script loaded');
 // Store for intercepted API responses
 let lastQuoteResponse = null;
 
-// Listen for intercepted responses from the MAIN world interceptor script
+// Listen for messages from the MAIN world interceptor script
 // (drivalia-interceptor.js is now loaded directly via manifest with world: "MAIN")
 window.addEventListener('message', (event) => {
   if (event.data?.type === 'DRIVALIA_QUOTE_RESPONSE') {
@@ -15,6 +15,32 @@ window.addEventListener('message', (event) => {
     console.log('[Drivalia] Stored quote response from interceptor');
   }
 });
+
+// Helper to send commands to MAIN world script for Angular interactions
+function angularCommand(command, selector, value) {
+  return new Promise((resolve) => {
+    const handler = (event) => {
+      if (event.data?.type === 'DRIVALIA_ANGULAR_RESULT') {
+        window.removeEventListener('message', handler);
+        resolve(event.data);
+      }
+    };
+    window.addEventListener('message', handler);
+
+    window.postMessage({
+      type: 'DRIVALIA_ANGULAR_COMMAND',
+      command,
+      selector,
+      value
+    }, '*');
+
+    // Timeout after 3 seconds
+    setTimeout(() => {
+      window.removeEventListener('message', handler);
+      resolve({ success: false, error: 'timeout' });
+    }, 3000);
+  });
+}
 
 // Product codes for different contract types
 // Updated from Playwright recording - exact product names in the modal
@@ -218,86 +244,74 @@ async function runQuote({ capCode, term, mileage, contractType, companyName = 'Q
     console.log('[Drivalia] Waiting for page to load...');
     await sleep(1500);
 
-    // Step 1: Set Customer Type using data-hook selector (from Playwright recording)
+    // Step 1: Set Customer Type using MAIN world Angular helper
     // The select element has data-hook="quoting.customer.customertype" and uses AngularJS
-    console.log('[Drivalia] Setting customer type...');
-    const customerTypeSelect = await waitForElement('select[data-hook="quoting.customer.customertype"]', 15000);
+    console.log('[Drivalia] Setting customer type via MAIN world...');
 
     // Determine customer type based on contract type
     // PCH = Personal, BCH/CH = Company
     const customerTypeValue = contractType === 'PCH' ? 'string:I' : 'string:C';
 
-    // For AngularJS, we need to properly trigger the ng-change
-    // Use the native setter and dispatch multiple events to ensure Angular picks it up
-    customerTypeSelect.focus();
-    await sleep(100);
-
-    // Find and click the correct option to simulate real user selection
-    const options = customerTypeSelect.querySelectorAll('option');
-    for (const option of options) {
-      if (option.value === customerTypeValue) {
-        option.selected = true;
-        break;
-      }
-    }
-
-    // Trigger all the events Angular might be listening to
-    customerTypeSelect.dispatchEvent(new Event('input', { bubbles: true }));
-    customerTypeSelect.dispatchEvent(new Event('change', { bubbles: true }));
-    customerTypeSelect.dispatchEvent(new Event('blur', { bubbles: true }));
-
-    // Also try triggering Angular's internal change detection
-    if (window.angular) {
-      const scope = window.angular.element(customerTypeSelect).scope();
-      if (scope) {
-        scope.$apply(() => {
-          scope.customer.data.customerType = customerTypeValue.replace('string:', '');
-          if (scope.typeChanged) scope.typeChanged();
-        });
-      }
-    }
-
-    console.log('[Drivalia] Customer type set to:', customerTypeValue);
+    // Use the MAIN world script to set the Angular select value
+    const selectResult = await angularCommand(
+      'setSelectValue',
+      'select[data-hook="quoting.customer.customertype"]',
+      customerTypeValue
+    );
+    console.log('[Drivalia] Customer type result:', selectResult);
     await sleep(1000); // Wait for Angular to update the form
 
     // Step 2: Click "Customer" link to expand section (from Playwright: getByRole('link', { name: 'Customer' }))
     console.log('[Drivalia] Expanding Customer section...');
     const customerLink = await findByRole('link', 'Customer');
     clickElement(customerLink);
-    await sleep(800);
+    await sleep(1000);
 
-    // Step 3: Enter company name (from Playwright: getByRole('textbox', { name: 'Company Name*' }))
+    // Step 3: Enter company name via MAIN world (from Playwright: getByRole('textbox', { name: 'Company Name*' }))
     console.log('[Drivalia] Entering company name...');
 
-    // Try multiple selectors for company name input
-    let companyInput = null;
+    // Try multiple selectors for company name input via MAIN world
     const companySelectors = [
       'input[aria-label*="Company Name"]',
       'input[data-hook*="company"]',
-      'input[placeholder*="Company"]',
+      'input[data-hook*="companyName"]',
       'input[ng-model*="companyName"]',
-      'input[ng-model*="company"]'
+      'input[ng-model*="company"]',
+      'input[placeholder*="Company"]'
     ];
 
+    let companyFound = false;
     for (const selector of companySelectors) {
-      companyInput = document.querySelector(selector);
-      if (companyInput) {
-        console.log('[Drivalia] Found company input with:', selector);
+      const result = await angularCommand('setInputValue', selector, companyName);
+      if (result.success) {
+        console.log('[Drivalia] Company name set via:', selector);
+        companyFound = true;
         break;
       }
     }
 
-    // Fallback to findByRole if direct selectors fail
-    if (!companyInput) {
-      companyInput = await findByRole('textbox', 'Company Name', 5000).catch(() => null);
+    if (!companyFound) {
+      // Try finding by visible label text
+      const labels = document.querySelectorAll('label, .cui-form-field__label');
+      for (const label of labels) {
+        if (label.textContent?.includes('Company Name')) {
+          const input = label.closest('.cui-form-field')?.querySelector('input') ||
+                       label.parentElement?.querySelector('input');
+          if (input) {
+            triggerAngularInput(input, companyName);
+            console.log('[Drivalia] Company name set via label proximity');
+            companyFound = true;
+            break;
+          }
+        }
+      }
     }
 
-    if (companyInput) {
-      triggerAngularInput(companyInput, companyName);
-      await sleep(300);
-    } else {
+    if (!companyFound) {
       console.warn('[Drivalia] Company name input not found, continuing anyway');
     }
+
+    await sleep(500);
 
     // Collapse Customer section by clicking link again
     clickElement(customerLink);
@@ -307,11 +321,41 @@ async function runQuote({ capCode, term, mileage, contractType, companyName = 'Q
     console.log('[Drivalia] Opening vehicle search...');
     const chooseVehicleBtn = await findByRole('button', 'Choose a Vehicle');
     clickElement(chooseVehicleBtn);
-    await sleep(1000);
+    await sleep(1500);
 
     // Step 5: Search for vehicle by CAP code (from Playwright: getByRole('textbox', { name: 'Search a Vehicle' }))
     console.log('[Drivalia] Searching for CAP code:', capCode);
-    const vehicleSearchInput = await findByRole('textbox', 'Search a Vehicle');
+
+    // Try multiple selectors for vehicle search input
+    const searchSelectors = [
+      'input[aria-label*="Search a Vehicle"]',
+      'input[aria-label*="Search"]',
+      'input[data-hook*="search"]',
+      'input[placeholder*="Search"]',
+      'input[placeholder*="search"]',
+      '.mat-dialog-content input[type="text"]',
+      'mat-dialog-container input',
+      'pos-vehicle-search input'
+    ];
+
+    let vehicleSearchInput = null;
+    for (const selector of searchSelectors) {
+      vehicleSearchInput = document.querySelector(selector);
+      if (vehicleSearchInput) {
+        console.log('[Drivalia] Found search input with:', selector);
+        break;
+      }
+    }
+
+    // Fallback to findByRole
+    if (!vehicleSearchInput) {
+      vehicleSearchInput = await findByRole('textbox', 'Search', 5000).catch(() => null);
+    }
+
+    if (!vehicleSearchInput) {
+      throw new Error('Vehicle search input not found');
+    }
+
     triggerAngularInput(vehicleSearchInput, capCode);
     await sleep(2000); // Wait for search results
 
