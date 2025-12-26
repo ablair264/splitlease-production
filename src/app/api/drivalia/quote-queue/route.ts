@@ -32,36 +32,55 @@ export async function GET(req: NextRequest) {
     const historyOnly = searchParams.get("history") === "true";
     const limit = parseInt(searchParams.get("limit") || "100", 10);
 
-    // For history, only get completed/error items
-    // For queue, get all recent items
-    const statusFilter = historyOnly
-      ? `status IN ('complete', 'error')`
-      : `1=1`;
-
-    const rows = await sql`
-      SELECT
-        id,
-        vehicle_id as "vehicleId",
-        cap_code as "capCode",
-        manufacturer,
-        model,
-        variant,
-        term,
-        annual_mileage as "annualMileage",
-        contract_type as "contractType",
-        status,
-        monthly_rental as "monthlyRental",
-        initial_rental as "initialRental",
-        quote_reference as "quoteReference",
-        error,
-        batch_id as "batchId",
-        created_at as "createdAt",
-        updated_at as "updatedAt"
-      FROM drivalia_quotes
-      WHERE ${historyOnly ? sql`status IN ('complete', 'error')` : sql`1=1`}
-      ORDER BY created_at DESC
-      LIMIT ${limit}
-    `;
+    // Use separate queries for history vs all items
+    const rows = historyOnly
+      ? await sql`
+          SELECT
+            id,
+            vehicle_id as "vehicleId",
+            cap_code as "capCode",
+            manufacturer,
+            model,
+            variant,
+            term,
+            annual_mileage as "annualMileage",
+            contract_type as "contractType",
+            status,
+            monthly_rental as "monthlyRental",
+            initial_rental as "initialRental",
+            quote_reference as "quoteReference",
+            error,
+            batch_id as "batchId",
+            created_at as "createdAt",
+            updated_at as "updatedAt"
+          FROM drivalia_quotes
+          WHERE status IN ('complete', 'error')
+          ORDER BY created_at DESC
+          LIMIT ${limit}
+        `
+      : await sql`
+          SELECT
+            id,
+            vehicle_id as "vehicleId",
+            cap_code as "capCode",
+            manufacturer,
+            model,
+            variant,
+            term,
+            annual_mileage as "annualMileage",
+            contract_type as "contractType",
+            status,
+            monthly_rental as "monthlyRental",
+            initial_rental as "initialRental",
+            quote_reference as "quoteReference",
+            error,
+            batch_id as "batchId",
+            created_at as "createdAt",
+            updated_at as "updatedAt"
+          FROM drivalia_quotes
+          ORDER BY created_at DESC
+          LIMIT ${limit}
+        `;
 
     // Transform to match the expected format
     const queue = rows.map((row) => ({
