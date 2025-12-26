@@ -163,9 +163,50 @@ async function runQuote({ capCode, term, mileage, contractType, companyName = 'Q
       await sleep(2000);
     }
 
+    // Step 0: Wait for page to fully load and expand customer details accordion
+    console.log('[Drivalia] Waiting for page to load...');
+    await sleep(1000);
+
+    // Expand customer details section - click the accordion/panel header
+    console.log('[Drivalia] Expanding customer details section...');
+    const accordionSelectors = [
+      'mat-expansion-panel-header',
+      '.mat-expansion-panel-header',
+      '[class*="accordion"] [class*="header"]',
+      '.quoting-layout__header-title',
+      '[class*="expansion"] [class*="header"]',
+      'mat-panel-title',
+      '.customer-panel-header',
+      '[aria-label*="Customer"]',
+      'button[aria-expanded="false"]'
+    ];
+
+    for (const selector of accordionSelectors) {
+      const accordion = document.querySelector(selector);
+      if (accordion) {
+        console.log('[Drivalia] Found accordion element:', selector);
+        clickElement(accordion);
+        await sleep(500);
+        break;
+      }
+    }
+
+    // Also try clicking on any collapsed panel text that contains "Customer"
+    const panelHeaders = document.querySelectorAll('mat-expansion-panel-header, .mat-expansion-panel-header, [class*="panel-header"]');
+    for (const header of panelHeaders) {
+      if (header.textContent?.toLowerCase().includes('customer')) {
+        console.log('[Drivalia] Clicking Customer panel header');
+        clickElement(header);
+        await sleep(500);
+        break;
+      }
+    }
+
+    await sleep(500);
+
     // Step 1: Set Customer Type to Corporate (C)
     console.log('[Drivalia] Setting customer type...');
-    const customerTypeSelect = await waitForElement('[aria-label="Customer Type"], #\\34 33, select[ng-model*="customerType"]');
+    const customerTypeSelect = await waitForElement('[aria-label="Customer Type"], #\\34 33, select[ng-model*="customerType"], mat-select[formcontrolname*="customer"], select[name*="customer"]', 15000);
     if (customerTypeSelect.tagName === 'SELECT') {
       customerTypeSelect.value = 'string:C';
       customerTypeSelect.dispatchEvent(new Event('change', { bubbles: true }));
@@ -178,16 +219,9 @@ async function runQuote({ capCode, term, mileage, contractType, companyName = 'Q
     }
     await sleep(500);
 
-    // Step 2: Expand customer section and enter company name
+    // Step 2: Enter company name
     console.log('[Drivalia] Entering company name...');
-    // Click the expand icon if present
-    const expandIcon = document.querySelector('.quoting-layout__header-title i, [class*="expand"]');
-    if (expandIcon) {
-      clickElement(expandIcon);
-      await sleep(300);
-    }
-
-    const companyInput = await waitForElement('[aria-label="Company Name"], #\\35 60, input[placeholder*="Company"]');
+    const companyInput = await waitForElement('[aria-label="Company Name"], #\\35 60, input[placeholder*="Company"], input[formcontrolname*="company"], input[name*="company"]');
     triggerAngularInput(companyInput, companyName);
     await sleep(300);
 

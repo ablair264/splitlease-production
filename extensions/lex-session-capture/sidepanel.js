@@ -58,12 +58,12 @@ document.addEventListener('DOMContentLoaded', async () => {
   await checkLexQueue();
   await checkDrivaliaQueue();
 
-  // Periodically check
+  // Periodically check (5 seconds to avoid Chrome throttling)
   setInterval(async () => {
     await checkAllProviders();
     await checkLexQueue();
     await checkDrivaliaQueue();
-  }, 3000);
+  }, 5000);
 
   // Check both providers status
   async function checkAllProviders() {
