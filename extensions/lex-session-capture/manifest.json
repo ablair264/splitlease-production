@@ -30,6 +30,12 @@
       "matches": ["https://www.caafgenus3.co.uk/*"],
       "js": ["drivalia-content.js"],
       "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://www.caafgenus3.co.uk/*"],
+      "js": ["drivalia-interceptor.js"],
+      "run_at": "document_start",
+      "world": "MAIN"
     }
   ],
   "action": {

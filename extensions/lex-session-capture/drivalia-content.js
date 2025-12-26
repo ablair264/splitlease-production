@@ -7,36 +7,14 @@ console.log('[Drivalia] Content script loaded');
 // Store for intercepted API responses
 let lastQuoteResponse = null;
 
-// Inject XHR interceptor to capture quote responses
-// Uses external script file to comply with CSP
-function injectResponseInterceptor() {
-  const script = document.createElement('script');
-  // Use external script file to avoid CSP inline script restrictions
-  script.src = chrome.runtime.getURL('drivalia-interceptor.js');
-  script.onload = function() {
-    console.log('[Drivalia] Interceptor script loaded');
-    this.remove();
-  };
-  script.onerror = function() {
-    console.error('[Drivalia] Failed to load interceptor script');
-  };
-  (document.head || document.documentElement).appendChild(script);
-}
-
-// Listen for intercepted responses
+// Listen for intercepted responses from the MAIN world interceptor script
+// (drivalia-interceptor.js is now loaded directly via manifest with world: "MAIN")
 window.addEventListener('message', (event) => {
   if (event.data?.type === 'DRIVALIA_QUOTE_RESPONSE') {
     lastQuoteResponse = event.data.data;
-    console.log('[Drivalia] Stored quote response');
+    console.log('[Drivalia] Stored quote response from interceptor');
   }
 });
-
-// Install interceptor when DOM is ready
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', injectResponseInterceptor);
-} else {
-  injectResponseInterceptor();
-}
 
 // Product codes for different contract types
 // Updated from Playwright recording - exact product names in the modal
