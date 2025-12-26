@@ -19,9 +19,105 @@ export async function GET(request: NextRequest) {
     const transmission = searchParams.get("transmission");
     const minPrice = searchParams.get("minPrice");
     const maxPrice = searchParams.get("maxPrice");
+    const requirePricing = searchParams.get("requirePricing") !== "false";
+    const hasCapCode = searchParams.get("hasCapCode") === "true";
 
     // Sort
     const sortBy = searchParams.get("sortBy") || "price-asc";
+
+    // If we don't require pricing, use a simpler query
+    if (!requirePricing) {
+      const whereConditions = and(
+        search ? or(
+          ilike(vehicles.manufacturer, `%${search}%`),
+          ilike(vehicles.model, `%${search}%`),
+          ilike(vehicles.variant, `%${search}%`)
+        ) : undefined,
+        manufacturer ? ilike(vehicles.manufacturer, `%${manufacturer}%`) : undefined,
+        fuelType ? ilike(vehicles.fuelType, `%${fuelType}%`) : undefined,
+        bodyType ? ilike(vehicles.bodyStyle, `%${bodyType}%`) : undefined,
+        transmission ? ilike(vehicles.transmission, `%${transmission}%`) : undefined,
+        hasCapCode ? sql`${vehicles.capCode} IS NOT NULL AND ${vehicles.capCode} != ''` : undefined
+      );
+
+      const vehicleResults = await db
+        .select({
+          id: vehicles.id,
+          capCode: vehicles.capCode,
+          manufacturer: vehicles.manufacturer,
+          model: vehicles.model,
+          variant: vehicles.variant,
+          modelYear: vehicles.modelYear,
+          p11d: vehicles.p11d,
+          otr: vehicles.otr,
+          engineSize: vehicles.engineSize,
+          transmission: vehicles.transmission,
+          doors: vehicles.doors,
+          fuelType: vehicles.fuelType,
+          co2: vehicles.co2,
+          mpg: vehicles.mpg,
+          bodyStyle: vehicles.bodyStyle,
+          insuranceGroup: vehicles.insuranceGroup,
+          euroClass: vehicles.euroClass,
+          imageFolder: vehicles.imageFolder,
+          createdAt: vehicles.createdAt,
+        })
+        .from(vehicles)
+        .where(whereConditions)
+        .orderBy(asc(vehicles.manufacturer), asc(vehicles.model))
+        .limit(limit)
+        .offset(offset);
+
+      // Get total count
+      const countResult = await db
+        .select({ count: sql<number>`COUNT(*)` })
+        .from(vehicles)
+        .where(whereConditions);
+      const totalCount = countResult[0]?.count || 0;
+
+      // Get unique manufacturers
+      const makesResult = await db
+        .selectDistinct({ manufacturer: vehicles.manufacturer })
+        .from(vehicles)
+        .orderBy(asc(vehicles.manufacturer));
+      const makes = makesResult.map(m => m.manufacturer);
+
+      // Transform data
+      const transformedVehicles = vehicleResults.map((v) => ({
+        id: v.id,
+        capCode: v.capCode,
+        manufacturer: v.manufacturer,
+        model: v.model,
+        variant: v.variant || "",
+        derivative: v.variant || "",
+        modelYear: v.modelYear || "",
+        fuelType: v.fuelType || "Unknown",
+        bodyType: v.bodyStyle || "Unknown",
+        bodyStyle: v.bodyStyle || "Unknown",
+        transmission: v.transmission || "Unknown",
+        engineSize: v.engineSize ? `${v.engineSize}cc` : undefined,
+        co2: v.co2 || 0,
+        p11d: v.p11d || 0,
+        mpg: v.mpg ? parseFloat(v.mpg) : undefined,
+        doors: v.doors || undefined,
+        imageFolder: v.imageFolder || undefined,
+        isNew: v.modelYear === "26" || v.modelYear === "25",
+        isSpecialOffer: false,
+        quickDelivery: false,
+        baseMonthlyPrice: 0,
+      }));
+
+      return NextResponse.json({
+        vehicles: transformedVehicles,
+        makes,
+        pagination: {
+          page,
+          limit,
+          total: totalCount,
+          totalPages: Math.ceil(Number(totalCount) / limit),
+        },
+      });
+    }
 
     // Build base query to get vehicles with their lowest price
     const vehiclesWithPricing = await db

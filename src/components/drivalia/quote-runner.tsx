@@ -71,6 +71,9 @@ export function DrivaliaQuoteRunner({ onQuotesComplete }: { onQuotesComplete?: (
     setVehiclesLoading(true);
     try {
       const params = new URLSearchParams();
+      params.set("requirePricing", "false");
+      params.set("hasCapCode", "true");
+      params.set("limit", "1000");
       if (selectedMake) params.set("make", selectedMake);
 
       const response = await fetch(`/api/vehicles?${params}`);

@@ -258,83 +258,35 @@ export function QuoteRunner({ onQuotesComplete }: { onQuotesComplete?: () => voi
     return (
       <div className="p-8 text-center text-white/50">
         <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2" />
-        Checking session...
+        Loading...
       </div>
     );
   }
 
   return (
     <div className="space-y-6">
-      {/* Session Status */}
-      <div
-        className={`p-4 rounded-xl border ${
-          session?.hasValidSession
-            ? "bg-green-500/10 border-green-500/30"
-            : "bg-yellow-500/10 border-yellow-500/30"
-        }`}
-      >
+      {/* Info Banner */}
+      <div className="p-4 rounded-xl border bg-[#79d5e9]/10 border-[#79d5e9]/30">
         <div className="flex items-center gap-3">
-          {session?.hasValidSession ? (
-            <>
-              <CheckCircle2 className="h-5 w-5 text-green-500" />
-              <div className="flex-1">
-                <span className="text-green-400 font-medium">Session Active</span>
-                {session.expiresAt && (
-                  <span className="text-white/50 ml-2 text-sm">
-                    Expires: {new Date(session.expiresAt).toLocaleString()}
-                  </span>
-                )}
-              </div>
-              <button
-                onClick={checkSession}
-                className="p-2 rounded-lg hover:bg-white/10 transition-colors"
-              >
-                <RefreshCw className="h-4 w-4 text-white/50" />
-              </button>
-            </>
-          ) : (
-            <>
-              <AlertCircle className="h-5 w-5 text-yellow-500" />
-              <div className="flex-1">
-                <span className="text-yellow-400">No valid session</span>
-                <span className="text-white/50 ml-2 text-sm">
-                  Use the browser extension to capture a session
-                </span>
-              </div>
-            </>
-          )}
+          <AlertCircle className="h-5 w-5 text-[#79d5e9]" />
+          <div className="flex-1">
+            <span className="text-[#79d5e9]">
+              Select vehicles below, then click &quot;Run Quotes&quot;. Process the queue from the browser extension sidepanel.
+            </span>
+          </div>
+          <a
+            href="https://associate.lexautolease.co.uk/quote"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="px-3 py-1.5 rounded-lg bg-[#79d5e9]/20 text-[#79d5e9] text-sm hover:bg-[#79d5e9]/30 transition-colors flex items-center gap-1"
+          >
+            Open Portal <ExternalLink className="h-3 w-3" />
+          </a>
         </div>
       </div>
 
-      {!session?.hasValidSession ? (
-        /* Extension Instructions */
-        <div
-          className="p-6 rounded-xl border"
-          style={{ background: "rgba(26, 31, 42, 0.6)", borderColor: "rgba(255, 255, 255, 0.1)" }}
-        >
-          <div className="flex items-start gap-4">
-            <div className="p-3 rounded-lg" style={{ background: "rgba(121, 213, 233, 0.15)" }}>
-              <Chrome className="h-6 w-6 text-[#79d5e9]" />
-            </div>
-            <div className="flex-1">
-              <h3 className="text-lg font-semibold text-white mb-2">
-                Browser Extension Required
-              </h3>
-              <p className="text-sm text-white/60 mb-4">
-                Install the Chrome extension, login to Lex, and capture your session to run quotes.
-              </p>
-              <a
-                href="https://associate.lexautolease.co.uk"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 text-sm text-[#79d5e9] hover:underline"
-              >
-                Open Lex Portal <ExternalLink className="h-3 w-3" />
-              </a>
-            </div>
-          </div>
-        </div>
-      ) : (
+      {/* Always show Quote Runner UI - extension handles session */}
+      {(
         /* Quote Runner UI */
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Left: Vehicle Picker */}
