@@ -8,65 +8,19 @@ console.log('[Drivalia] Content script loaded');
 let lastQuoteResponse = null;
 
 // Inject XHR interceptor to capture quote responses
+// Uses external script file to comply with CSP
 function injectResponseInterceptor() {
   const script = document.createElement('script');
-  script.textContent = `
-    (function() {
-      // Store original fetch
-      const originalFetch = window.fetch;
-
-      window.fetch = function(...args) {
-        return originalFetch.apply(this, args).then(response => {
-          const url = args[0]?.url || args[0];
-
-          // Intercept quote save responses (URL contains the quote number)
-          if (url && typeof url === 'string' && url.includes('/application/')) {
-            response.clone().json().then(data => {
-              window.postMessage({
-                type: 'DRIVALIA_QUOTE_RESPONSE',
-                data: data,
-                url: url
-              }, '*');
-              console.log('[Drivalia] Intercepted quote response:', url);
-            }).catch(() => {});
-          }
-
-          return response;
-        });
-      };
-
-      // Store original XHR
-      const originalOpen = XMLHttpRequest.prototype.open;
-      const originalSend = XMLHttpRequest.prototype.send;
-
-      XMLHttpRequest.prototype.open = function(method, url) {
-        this._drivaliaUrl = url;
-        return originalOpen.apply(this, arguments);
-      };
-
-      XMLHttpRequest.prototype.send = function() {
-        this.addEventListener('load', function() {
-          // Intercept application/quote responses
-          if (this._drivaliaUrl && this._drivaliaUrl.includes('/application/')) {
-            try {
-              const data = JSON.parse(this.responseText);
-              window.postMessage({
-                type: 'DRIVALIA_QUOTE_RESPONSE',
-                data: data,
-                url: this._drivaliaUrl
-              }, '*');
-              console.log('[Drivalia] Intercepted XHR quote response');
-            } catch (e) {}
-          }
-        });
-        return originalSend.apply(this, arguments);
-      };
-
-      console.log('[Drivalia] Response interceptor installed');
-    })();
-  `;
-  document.documentElement.appendChild(script);
-  script.remove();
+  // Use external script file to avoid CSP inline script restrictions
+  script.src = chrome.runtime.getURL('drivalia-interceptor.js');
+  script.onload = function() {
+    console.log('[Drivalia] Interceptor script loaded');
+    this.remove();
+  };
+  script.onerror = function() {
+    console.error('[Drivalia] Failed to load interceptor script');
+  };
+  (document.head || document.documentElement).appendChild(script);
 }
 
 // Listen for intercepted responses
