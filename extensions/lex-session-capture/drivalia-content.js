@@ -513,13 +513,27 @@ async function runQuote({ capCode, term, mileage, contractType, companyName = 'Q
       console.warn('[Drivalia] Mileage input not found');
     }
 
-    // Step 15: Click Recalculate (from Playwright: getByRole('button', { name: 'Recalculate' }))
+    // Step 16: Click Recalculate (from Playwright: getByRole('button', { name: 'Recalculate' }))
     console.log('[Drivalia] Clicking Recalculate...');
     const recalculateBtn = await findByRole('button', 'Recalculate');
     clickElement(recalculateBtn);
-    await sleep(3000); // Wait for calculation
 
-    // Step 16: Click Save Quote (from Playwright: getByRole('button', { name: ' Save Quote' }) - note space)
+    // Wait for "Recalculating" to disappear (max 30 seconds)
+    console.log('[Drivalia] Waiting for calculation to complete...');
+    await sleep(1000); // Initial wait for recalculating to start
+    let recalcWait = 0;
+    while (recalcWait < 30000) {
+      const recalculating = document.querySelector('when-waiting');
+      if (!recalculating || !recalculating.textContent?.includes('Recalculating')) {
+        console.log('[Drivalia] Calculation completed after', recalcWait, 'ms');
+        break;
+      }
+      await sleep(500);
+      recalcWait += 500;
+    }
+    await sleep(500); // Extra buffer
+
+    // Step 17: Click Save Quote (from Playwright: getByRole('button', { name: ' Save Quote' }) - note space)
     console.log('[Drivalia] Saving quote...');
     lastQuoteResponse = null; // Clear previous response
     const saveQuoteBtn = await waitForElementByText('Save Quote', 'button');
