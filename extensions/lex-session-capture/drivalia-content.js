@@ -406,11 +406,42 @@ async function runQuote({ capCode, term, mileage, contractType, companyName = 'Q
     console.log('[Drivalia] Confirming vehicle selection...');
     const useVehicleBtn = await findByRole('button', 'Use this vehicle');
     clickElement(useVehicleBtn);
-    await sleep(1000);
+    await sleep(1500);
 
-    // Step 8: Click "Select a Product" button (from Playwright: getByRole('button', { name: 'Select a Product' }))
+    // Step 8: Wait for products to load (spinner disappears and button enabled)
+    console.log('[Drivalia] Waiting for products to load...');
+
+    // Wait for spinner to disappear (max 15 seconds)
+    let spinnerWait = 0;
+    while (spinnerWait < 15000) {
+      const spinner = document.querySelector('cui-spinner[trigger="loadingProducts"] .is-spinning, .cui-spinner.is-spinning');
+      if (!spinner) {
+        console.log('[Drivalia] Spinner gone after', spinnerWait, 'ms');
+        break;
+      }
+      await sleep(500);
+      spinnerWait += 500;
+    }
+
+    // Wait for "Select a Product" button to be enabled (max 10 seconds)
+    let buttonWait = 0;
+    let selectProductBtn = null;
+    while (buttonWait < 10000) {
+      selectProductBtn = document.querySelector('button[data-hook="quoting.finance.product-select"]:not([disabled])');
+      if (selectProductBtn && !selectProductBtn.disabled) {
+        console.log('[Drivalia] Select Product button enabled after', buttonWait, 'ms');
+        break;
+      }
+      await sleep(500);
+      buttonWait += 500;
+    }
+
+    if (!selectProductBtn || selectProductBtn.disabled) {
+      // Fallback to findByRole
+      selectProductBtn = await findByRole('button', 'Select a Product');
+    }
+
     console.log('[Drivalia] Opening product selection...');
-    const selectProductBtn = await findByRole('button', 'Select a Product');
     clickElement(selectProductBtn);
     await sleep(1000);
 
