@@ -456,33 +456,62 @@ async function runQuote({ capCode, term, mileage, contractType, companyName = 'Q
     // Step 10: Click "Use this Product" button (from Playwright: getByRole('button', { name: 'Use this Product' }))
     const useProductBtn = await findByRole('button', 'Use this Product');
     clickElement(useProductBtn);
-    await sleep(1000);
+    await sleep(1500);
 
-    // Step 11: Click "Finance" link to expand finance section (from Playwright: getByRole('link', { name: 'Finance' }))
+    // Step 11: Wait for Finance config section to load
+    console.log('[Drivalia] Waiting for Finance config to load...');
+    let financeConfigWait = 0;
+    while (financeConfigWait < 10000) {
+      const financeConfig = document.querySelector('[data-hook="quoting.finance.config.finance.dropdown"]');
+      if (financeConfig) {
+        console.log('[Drivalia] Finance config loaded after', financeConfigWait, 'ms');
+        break;
+      }
+      await sleep(500);
+      financeConfigWait += 500;
+    }
+    await sleep(500); // Extra time for Angular to finish rendering
+
+    // Step 12: Click "Finance" link to expand finance section (from Playwright: getByRole('link', { name: 'Finance' }))
     console.log('[Drivalia] Expanding Finance section...');
     const financeLink = await findByRole('link', 'Finance');
     clickElement(financeLink);
-    await sleep(500);
+    await sleep(800);
 
-    // Step 12: Set "No. in Advance (financier)" spinbutton
-    // From Playwright: getByRole('spinbutton', { name: 'No. in Advance (financier)' })
+    // Step 13: Set "No. in Advance (financier)" using data-hook selector
     console.log('[Drivalia] Setting upfront payments:', upfrontPayments);
-    const advanceInput = await findByRole('spinbutton', 'No. in Advance');
-    triggerAngularInput(advanceInput, upfrontPayments.toString());
-    await sleep(300);
+    const advanceInput = document.querySelector('input[data-hook="quoting.finance.config.noinadvancefinancier"]') ||
+                         await findByRole('spinbutton', 'No. in Advance').catch(() => null);
+    if (advanceInput) {
+      triggerAngularInput(advanceInput, upfrontPayments.toString());
+      await sleep(300);
+    } else {
+      console.warn('[Drivalia] No. in Advance input not found');
+    }
 
-    // Step 13: Enter term (from Playwright: getByRole('spinbutton', { name: 'Term' }))
+    // Step 14: Enter term (from Playwright: getByRole('spinbutton', { name: 'Term' }))
     console.log('[Drivalia] Entering term:', term);
-    const termInput = await findByRole('spinbutton', 'Term');
-    triggerAngularInput(termInput, term.toString());
-    await sleep(300);
+    const termInput = document.querySelector('input[data-hook*="term"]') ||
+                      await findByRole('spinbutton', 'Term').catch(() => null);
+    if (termInput) {
+      triggerAngularInput(termInput, term.toString());
+      await sleep(300);
+    } else {
+      console.warn('[Drivalia] Term input not found');
+    }
 
-    // Step 14: Enter annual mileage in thousands (from Playwright: getByRole('textbox', { name: 'Annual Mileage (x1000)' }))
+    // Step 15: Enter annual mileage in thousands (from Playwright: getByRole('textbox', { name: 'Annual Mileage (x1000)' }))
     console.log('[Drivalia] Entering mileage:', mileage);
     const mileageInThousands = Math.round(mileage / 1000);
-    const mileageInput = await findByRole('textbox', 'Annual Mileage');
-    triggerAngularInput(mileageInput, mileageInThousands.toString());
-    await sleep(300);
+    const mileageInput = document.querySelector('input[data-hook*="mileage"]') ||
+                         document.querySelector('input[data-hook*="annualmileage"]') ||
+                         await findByRole('textbox', 'Annual Mileage').catch(() => null);
+    if (mileageInput) {
+      triggerAngularInput(mileageInput, mileageInThousands.toString());
+      await sleep(300);
+    } else {
+      console.warn('[Drivalia] Mileage input not found');
+    }
 
     // Step 15: Click Recalculate (from Playwright: getByRole('button', { name: 'Recalculate' }))
     console.log('[Drivalia] Clicking Recalculate...');
