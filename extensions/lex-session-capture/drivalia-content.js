@@ -360,11 +360,46 @@ async function runQuote({ capCode, term, mileage, contractType, companyName = 'Q
     }
 
     triggerAngularInput(vehicleSearchInput, capCode);
-    await sleep(2000); // Wait for search results
+    await sleep(3000); // Wait for search results to load
 
     // Step 6: Click on the first search result (from Playwright: .mat-list-item-content)
     console.log('[Drivalia] Selecting vehicle from results...');
-    const searchResult = await waitForElement('.mat-list-item-content', 5000);
+
+    // Try multiple selectors for search results
+    const resultSelectors = [
+      '.mat-list-item-content',
+      'mat-list-item',
+      'mat-nav-list mat-list-item',
+      '.mat-list-item',
+      '[data-hook*="search-results"] mat-list-item',
+      '[data-hook*="search"] .mat-list-item',
+      'mat-nav-list .mat-list-item-content'
+    ];
+
+    let searchResult = null;
+    for (const selector of resultSelectors) {
+      searchResult = document.querySelector(selector);
+      if (searchResult) {
+        console.log('[Drivalia] Found search result with:', selector);
+        break;
+      }
+    }
+
+    if (!searchResult) {
+      // Wait a bit more and try again
+      await sleep(2000);
+      for (const selector of resultSelectors) {
+        searchResult = document.querySelector(selector);
+        if (searchResult) {
+          console.log('[Drivalia] Found search result (retry) with:', selector);
+          break;
+        }
+      }
+    }
+
+    if (!searchResult) {
+      throw new Error('No vehicle search results found - check if CAP code is valid');
+    }
     clickElement(searchResult);
     await sleep(500);
 

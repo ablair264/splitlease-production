@@ -18,6 +18,7 @@
 
       if (command === 'setSelectValue') {
         const element = document.querySelector(selector);
+        console.log('[Drivalia MAIN] setSelectValue - element found:', !!element, 'angular available:', !!window.angular);
         if (element && window.angular) {
           try {
             const scope = window.angular.element(element).scope();
