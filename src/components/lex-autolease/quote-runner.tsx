@@ -1,24 +1,19 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   Loader2,
   CheckCircle2,
   AlertCircle,
-  Chrome,
   ExternalLink,
   Search,
   Car,
   Play,
   Trash2,
-  RefreshCw,
+  Calculator,
+  Settings2,
+  X,
 } from "lucide-react";
-
-type SessionInfo = {
-  hasValidSession: boolean;
-  username?: string;
-  expiresAt?: string;
-};
 
 type Vehicle = {
   id: string;
@@ -37,20 +32,9 @@ type Vehicle = {
 };
 
 type QuoteConfig = {
-  term: number;
-  mileage: number;
-  contractType: string;
-};
-
-type QueuedVehicle = Vehicle & {
-  config: QuoteConfig;
-  status: "pending" | "running" | "complete" | "error";
-  result?: {
-    monthlyRental?: number;
-    initialRental?: number;
-    quoteId?: string;
-  };
-  error?: string;
+  terms: number[];
+  mileages: number[];
+  contractTypes: string[];
 };
 
 const TERMS = [24, 36, 48, 60];
@@ -61,10 +45,69 @@ const CONTRACT_TYPES = [
   { value: "personal_contract_hire", label: "PCH" },
 ];
 
-export function QuoteRunner({ onQuotesComplete }: { onQuotesComplete?: () => void }) {
-  const [session, setSession] = useState<SessionInfo | null>(null);
-  const [sessionLoading, setSessionLoading] = useState(true);
+// Multi-select chip component
+function ChipSelect<T extends string | number>({
+  options,
+  selected,
+  onChange,
+  renderLabel,
+}: {
+  options: T[];
+  selected: T[];
+  onChange: (selected: T[]) => void;
+  renderLabel: (option: T) => string;
+}) {
+  const toggle = (option: T) => {
+    if (selected.includes(option)) {
+      onChange(selected.filter((s) => s !== option));
+    } else {
+      onChange([...selected, option]);
+    }
+  };
 
+  const selectAll = () => onChange([...options]);
+  const clearAll = () => onChange([]);
+
+  return (
+    <div className="space-y-2">
+      <div className="flex flex-wrap gap-2">
+        {options.map((option) => {
+          const isSelected = selected.includes(option);
+          return (
+            <button
+              key={String(option)}
+              onClick={() => toggle(option)}
+              className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-all ${
+                isSelected
+                  ? "bg-[#79d5e9]/30 border-[#79d5e9]/50 text-[#79d5e9]"
+                  : "bg-white/5 border-white/10 text-white/60 hover:border-white/30"
+              }`}
+            >
+              {renderLabel(option)}
+            </button>
+          );
+        })}
+      </div>
+      <div className="flex gap-2">
+        <button
+          onClick={selectAll}
+          className="text-xs text-white/40 hover:text-white/60 transition-colors"
+        >
+          Select all
+        </button>
+        <span className="text-white/20">•</span>
+        <button
+          onClick={clearAll}
+          className="text-xs text-white/40 hover:text-white/60 transition-colors"
+        >
+          Clear
+        </button>
+      </div>
+    </div>
+  );
+}
+
+export function QuoteRunner({ onQuotesComplete }: { onQuotesComplete?: () => void }) {
   // Vehicle search
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [makes, setMakes] = useState<string[]>([]);
@@ -74,30 +117,27 @@ export function QuoteRunner({ onQuotesComplete }: { onQuotesComplete?: () => voi
   const [currentPage, setCurrentPage] = useState(1);
   const ITEMS_PER_PAGE = 20;
 
-  // Quote configuration
+  // Quote configuration - now multi-select
   const [config, setConfig] = useState<QuoteConfig>({
-    term: 36,
-    mileage: 10000,
-    contractType: "contract_hire_without_maintenance",
+    terms: [36],
+    mileages: [10000],
+    contractTypes: ["contract_hire_without_maintenance"],
   });
 
-  // Queue
-  const [queue, setQueue] = useState<QueuedVehicle[]>([]);
+  // Selected vehicles
+  const [selectedVehicles, setSelectedVehicles] = useState<Vehicle[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [queueSent, setQueueSent] = useState(false);
 
-  // Check session status
-  const checkSession = async () => {
-    try {
-      const response = await fetch("/api/lex-autolease/session");
-      const data = await response.json();
-      setSession(data);
-    } catch (error) {
-      console.error("Session check failed:", error);
-      setSession({ hasValidSession: false });
-    } finally {
-      setSessionLoading(false);
-    }
-  };
+  // Calculate total quotes
+  const totalQuotes = useMemo(() => {
+    return (
+      selectedVehicles.length *
+      config.terms.length *
+      config.mileages.length *
+      config.contractTypes.length
+    );
+  }, [selectedVehicles.length, config.terms.length, config.mileages.length, config.contractTypes.length]);
 
   // Fetch vehicles with Lex codes
   const fetchVehicles = async () => {
@@ -116,10 +156,6 @@ export function QuoteRunner({ onQuotesComplete }: { onQuotesComplete?: () => voi
       setVehiclesLoading(false);
     }
   };
-
-  useEffect(() => {
-    checkSession();
-  }, []);
 
   useEffect(() => {
     fetchVehicles();
@@ -148,117 +184,132 @@ export function QuoteRunner({ onQuotesComplete }: { onQuotesComplete?: () => voi
     setCurrentPage(1);
   }, [selectedMake, searchQuery]);
 
-  // Add vehicle to queue
-  const addToQueue = (vehicle: Vehicle) => {
-    // Check if already in queue
-    if (queue.some((q) => q.id === vehicle.id)) return;
-
-    setQueue([
-      ...queue,
-      {
-        ...vehicle,
-        config: { ...config },
-        status: "pending",
-      },
-    ]);
+  // Toggle vehicle selection
+  const toggleVehicle = (vehicle: Vehicle) => {
+    if (selectedVehicles.some((v) => v.id === vehicle.id)) {
+      setSelectedVehicles(selectedVehicles.filter((v) => v.id !== vehicle.id));
+    } else {
+      setSelectedVehicles([...selectedVehicles, vehicle]);
+    }
   };
 
-  // Remove from queue
-  const removeFromQueue = (vehicleId: string) => {
-    setQueue(queue.filter((q) => q.id !== vehicleId));
+  // Remove from selected
+  const removeVehicle = (vehicleId: string) => {
+    setSelectedVehicles(selectedVehicles.filter((v) => v.id !== vehicleId));
   };
 
-  // Clear queue
-  const clearQueue = () => {
-    setQueue([]);
+  // Clear all
+  const clearAll = () => {
+    setSelectedVehicles([]);
+    setQueueSent(false);
   };
 
-  // Save queue to server for extension to process
+  // Generate all quote combinations and save to server
   const saveQueueToServer = async () => {
+    if (selectedVehicles.length === 0) return;
+    if (config.terms.length === 0 || config.mileages.length === 0 || config.contractTypes.length === 0) {
+      alert("Please select at least one option for Term, Mileage, and Contract Type");
+      return;
+    }
+
+    setIsProcessing(true);
+
     try {
+      // Generate all combinations
+      const vehicleQueue: {
+        vehicleId: string;
+        capCode: string;
+        manufacturer: string;
+        model: string;
+        variant: string;
+        lexMakeCode: string;
+        lexModelCode: string;
+        lexVariantCode: string;
+        term: number;
+        mileage: number;
+        contractType: string;
+        co2: number;
+      }[] = [];
+
+      for (const vehicle of selectedVehicles) {
+        for (const term of config.terms) {
+          for (const mileage of config.mileages) {
+            for (const contractType of config.contractTypes) {
+              vehicleQueue.push({
+                vehicleId: vehicle.id,
+                capCode: vehicle.cap_code,
+                manufacturer: vehicle.manufacturer,
+                model: vehicle.model,
+                variant: vehicle.variant,
+                lexMakeCode: vehicle.lex_make_code,
+                lexModelCode: vehicle.lex_model_code,
+                lexVariantCode: vehicle.lex_variant_code,
+                term,
+                mileage,
+                contractType,
+                co2: vehicle.co2,
+              });
+            }
+          }
+        }
+      }
+
       const response = await fetch("/api/lex-autolease/quote-queue", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          vehicles: queue.map((v) => ({
-            vehicleId: v.id,
-            capCode: v.cap_code,
-            manufacturer: v.manufacturer,
-            model: v.model,
-            variant: v.variant,
-            lexMakeCode: v.lex_make_code,
-            lexModelCode: v.lex_model_code,
-            lexVariantCode: v.lex_variant_code,
-            term: v.config.term,
-            mileage: v.config.mileage,
-            contractType: v.config.contractType,
-            co2: v.co2,
-          })),
-        }),
+        body: JSON.stringify({ vehicles: vehicleQueue }),
       });
 
       if (response.ok) {
+        setQueueSent(true);
+        setSelectedVehicles([]);
+        onQuotesComplete?.();
+      } else {
         const data = await response.json();
-        setIsProcessing(true);
-        return data.queueId;
+        alert(data.error || "Failed to send queue");
       }
     } catch (error) {
       console.error("Failed to save queue:", error);
+      alert("Failed to save queue to server");
+    } finally {
+      setIsProcessing(false);
     }
   };
 
-  // Check queue status
-  const checkQueueStatus = async () => {
-    try {
-      const response = await fetch("/api/lex-autolease/quote-queue");
-      const data = await response.json();
-
-      if (data.queue) {
-        // Update queue with results
-        setQueue((prev) =>
-          prev.map((item) => {
-            const serverItem = data.queue.find(
-              (q: { vehicleId: string }) => q.vehicleId === item.id
-            );
-            if (serverItem) {
-              return {
-                ...item,
-                status: serverItem.status,
-                result: serverItem.result,
-                error: serverItem.error,
-              };
-            }
-            return item;
-          })
-        );
-
-        // Check if all complete
-        const allComplete = data.queue.every(
-          (q: { status: string }) => q.status === "complete" || q.status === "error"
-        );
-        if (allComplete) {
-          setIsProcessing(false);
-          onQuotesComplete?.();
-        }
-      }
-    } catch (error) {
-      console.error("Failed to check queue:", error);
-    }
-  };
-
-  // Poll for updates when processing
-  useEffect(() => {
-    if (isProcessing) {
-      const interval = setInterval(checkQueueStatus, 2000);
-      return () => clearInterval(interval);
-    }
-  }, [isProcessing]);
-
-  if (sessionLoading) {
+  // Show success message if queue was sent
+  if (queueSent) {
     return (
-      <div className="p-8 text-center text-white/50">
-        <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2" />
-        Loading...
+      <div className="space-y-6">
+        <div className="p-6 rounded-xl border bg-green-500/10 border-green-500/30">
+          <div className="flex items-start gap-4">
+            <CheckCircle2 className="h-6 w-6 text-green-500 mt-0.5" />
+            <div className="flex-1">
+              <h3 className="text-lg font-semibold text-green-400 mb-2">
+                Queue Sent Successfully!
+              </h3>
+              <p className="text-sm text-white/60 mb-4">
+                Open the browser extension sidepanel and click the Lex tab to process the queue.
+                Make sure the Lex Autolease portal is open and you&apos;re logged in.
+              </p>
+              <div className="flex gap-3">
+                <a
+                  href="https://associate.lexautolease.co.uk/quote"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[#79d5e9]/20 text-[#79d5e9] hover:bg-[#79d5e9]/30 transition-colors"
+                >
+                  Open Lex Portal <ExternalLink className="h-4 w-4" />
+                </a>
+                <button
+                  onClick={() => setQueueSent(false)}
+                  className="px-4 py-2 rounded-lg bg-white/10 text-white hover:bg-white/20 transition-colors"
+                >
+                  Queue More Vehicles
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     );
   }
@@ -271,7 +322,7 @@ export function QuoteRunner({ onQuotesComplete }: { onQuotesComplete?: () => voi
           <AlertCircle className="h-5 w-5 text-[#79d5e9]" />
           <div className="flex-1">
             <span className="text-[#79d5e9]">
-              Select vehicles below, then click &quot;Run Quotes&quot;. Process the queue from the browser extension sidepanel.
+              Select vehicles and quote options below. The system will generate all combinations automatically.
             </span>
           </div>
           <a
@@ -285,281 +336,321 @@ export function QuoteRunner({ onQuotesComplete }: { onQuotesComplete?: () => voi
         </div>
       </div>
 
-      {/* Always show Quote Runner UI - extension handles session */}
-      {(
-        /* Quote Runner UI */
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Left: Vehicle Picker */}
+      {/* Quote Configuration - Full Width */}
+      <div
+        className="rounded-xl border p-5"
+        style={{ background: "rgba(26, 31, 42, 0.6)", borderColor: "rgba(255, 255, 255, 0.1)" }}
+      >
+        <h3 className="text-white font-medium mb-4 flex items-center gap-2">
+          <Settings2 className="h-4 w-4 text-[#79d5e9]" />
+          Quote Configuration
+          <span className="text-xs text-white/40 ml-2">Select multiple options per category</span>
+        </h3>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {/* Terms */}
+          <div>
+            <label className="text-sm text-white/70 mb-2 block font-medium">
+              Contract Term
+              {config.terms.length > 0 && (
+                <span className="text-[#79d5e9] ml-2">({config.terms.length} selected)</span>
+              )}
+            </label>
+            <ChipSelect
+              options={TERMS}
+              selected={config.terms}
+              onChange={(terms) => setConfig({ ...config, terms })}
+              renderLabel={(t) => `${t} mo`}
+            />
+          </div>
+
+          {/* Mileages */}
+          <div>
+            <label className="text-sm text-white/70 mb-2 block font-medium">
+              Annual Mileage
+              {config.mileages.length > 0 && (
+                <span className="text-[#79d5e9] ml-2">({config.mileages.length} selected)</span>
+              )}
+            </label>
+            <ChipSelect
+              options={MILEAGES}
+              selected={config.mileages}
+              onChange={(mileages) => setConfig({ ...config, mileages })}
+              renderLabel={(m) => `${(m / 1000).toFixed(0)}k`}
+            />
+          </div>
+
+          {/* Contract Types */}
+          <div>
+            <label className="text-sm text-white/70 mb-2 block font-medium">
+              Contract Type
+              {config.contractTypes.length > 0 && (
+                <span className="text-[#79d5e9] ml-2">({config.contractTypes.length} selected)</span>
+              )}
+            </label>
+            <ChipSelect
+              options={CONTRACT_TYPES.map((ct) => ct.value)}
+              selected={config.contractTypes}
+              onChange={(contractTypes) => setConfig({ ...config, contractTypes })}
+              renderLabel={(v) => CONTRACT_TYPES.find((ct) => ct.value === v)?.label || v}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Main Content - Two Columns */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Left: Vehicle Picker */}
+        <div
+          className="rounded-xl border p-4"
+          style={{ background: "rgba(26, 31, 42, 0.6)", borderColor: "rgba(255, 255, 255, 0.1)" }}
+        >
+          <h3 className="text-white font-medium mb-4 flex items-center gap-2">
+            <Car className="h-4 w-4 text-[#79d5e9]" />
+            Select Vehicles
+            <span className="text-xs text-white/40 ml-2">
+              {filteredVehicles.length} with Lex codes
+            </span>
+          </h3>
+
+          {/* Filters */}
+          <div className="flex gap-2 mb-4">
+            <select
+              value={selectedMake}
+              onChange={(e) => setSelectedMake(e.target.value)}
+              className="px-3 py-2 rounded-lg text-sm bg-[#1a1f2a] border border-white/10 text-white [&>option]:bg-[#1a1f2a] [&>option]:text-white"
+            >
+              <option value="">All Makes</option>
+              {makes.map((make) => (
+                <option key={make} value={make}>
+                  {make}
+                </option>
+              ))}
+            </select>
+
+            <div className="flex-1 relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-white/40" />
+              <input
+                type="text"
+                placeholder="Search vehicles..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-9 pr-3 py-2 rounded-lg text-sm bg-white/5 border border-white/10 text-white placeholder:text-white/40"
+              />
+            </div>
+          </div>
+
+          {/* Vehicle List */}
+          <div className="max-h-[350px] overflow-y-auto space-y-2">
+            {vehiclesLoading ? (
+              <div className="text-center py-8 text-white/40">
+                <Loader2 className="h-5 w-5 animate-spin mx-auto" />
+              </div>
+            ) : filteredVehicles.length === 0 ? (
+              <div className="text-center py-8 text-white/40 text-sm">
+                No vehicles with Lex codes found
+              </div>
+            ) : (
+              paginatedVehicles.map((vehicle) => {
+                const isSelected = selectedVehicles.some((v) => v.id === vehicle.id);
+                return (
+                  <div
+                    key={vehicle.id}
+                    className={`p-3 rounded-lg border transition-colors cursor-pointer ${
+                      isSelected
+                        ? "bg-[#79d5e9]/10 border-[#79d5e9]/30"
+                        : "bg-white/5 border-white/10 hover:border-white/20"
+                    }`}
+                    onClick={() => toggleVehicle(vehicle)}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="text-sm font-medium text-white">
+                          {vehicle.manufacturer} {vehicle.model}
+                        </div>
+                        <div className="text-xs text-white/50">
+                          {vehicle.variant} • {vehicle.fuel_type} • {vehicle.transmission}
+                        </div>
+                      </div>
+                      {isSelected ? (
+                        <CheckCircle2 className="h-4 w-4 text-[#79d5e9]" />
+                      ) : (
+                        <span className="text-xs text-white/40">Click to add</span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between mt-4 pt-4 border-t border-white/10">
+              <span className="text-xs text-white/50">
+                {filteredVehicles.length} vehicles
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                  className="px-3 py-1 rounded text-xs bg-white/10 text-white disabled:opacity-30 disabled:cursor-not-allowed hover:bg-white/20"
+                >
+                  Prev
+                </button>
+                <span className="text-xs text-white/70">
+                  {currentPage} / {totalPages}
+                </span>
+                <button
+                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                  disabled={currentPage === totalPages}
+                  className="px-3 py-1 rounded text-xs bg-white/10 text-white disabled:opacity-30 disabled:cursor-not-allowed hover:bg-white/20"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Right: Selected Vehicles & Summary */}
+        <div className="space-y-4">
+          {/* Selected Vehicles */}
+          <div
+            className="rounded-xl border p-4"
+            style={{ background: "rgba(26, 31, 42, 0.6)", borderColor: "rgba(255, 255, 255, 0.1)" }}
+          >
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-white font-medium">
+                Selected Vehicles ({selectedVehicles.length})
+              </h3>
+              {selectedVehicles.length > 0 && !isProcessing && (
+                <button
+                  onClick={clearAll}
+                  className="text-xs text-red-400 hover:text-red-300 flex items-center gap-1"
+                >
+                  <Trash2 className="h-3 w-3" />
+                  Clear All
+                </button>
+              )}
+            </div>
+
+            {selectedVehicles.length === 0 ? (
+              <div className="text-center py-8 text-white/40 text-sm">
+                Click vehicles on the left to select them
+              </div>
+            ) : (
+              <div className="space-y-2 max-h-[200px] overflow-y-auto">
+                {selectedVehicles.map((vehicle) => (
+                  <div
+                    key={vehicle.id}
+                    className="p-2 rounded-lg bg-white/5 border border-white/10 flex items-center gap-2"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium text-white truncate">
+                        {vehicle.manufacturer} {vehicle.model}
+                      </div>
+                      <div className="text-xs text-white/50 truncate">
+                        {vehicle.variant}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => removeVehicle(vehicle.id)}
+                      className="p-1 rounded hover:bg-white/10 text-white/40 hover:text-white/60"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Quote Summary */}
           <div
             className="rounded-xl border p-4"
             style={{ background: "rgba(26, 31, 42, 0.6)", borderColor: "rgba(255, 255, 255, 0.1)" }}
           >
             <h3 className="text-white font-medium mb-4 flex items-center gap-2">
-              <Car className="h-4 w-4 text-[#79d5e9]" />
-              Select Vehicles
+              <Calculator className="h-4 w-4 text-[#79d5e9]" />
+              Quote Summary
             </h3>
 
-            {/* Filters */}
-            <div className="flex gap-2 mb-4">
-              <select
-                value={selectedMake}
-                onChange={(e) => setSelectedMake(e.target.value)}
-                className="px-3 py-2 rounded-lg text-sm bg-[#1a1f2a] border border-white/10 text-white [&>option]:bg-[#1a1f2a] [&>option]:text-white"
-              >
-                <option value="">All Makes</option>
-                {makes.map((make) => (
-                  <option key={make} value={make}>
-                    {make}
-                  </option>
-                ))}
-              </select>
-
-              <div className="flex-1 relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-white/40" />
-                <input
-                  type="text"
-                  placeholder="Search vehicles..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-9 pr-3 py-2 rounded-lg text-sm bg-white/5 border border-white/10 text-white placeholder:text-white/40"
-                />
+            <div className="space-y-3 text-sm">
+              <div className="flex justify-between">
+                <span className="text-white/60">Vehicles</span>
+                <span className="text-white font-medium">{selectedVehicles.length}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-white/60">Terms</span>
+                <span className="text-white font-medium">
+                  {config.terms.length > 0 ? config.terms.map(t => `${t}mo`).join(", ") : "None"}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-white/60">Mileages</span>
+                <span className="text-white font-medium">
+                  {config.mileages.length > 0 ? config.mileages.map(m => `${m/1000}k`).join(", ") : "None"}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-white/60">Contracts</span>
+                <span className="text-white font-medium text-right">
+                  {config.contractTypes.length > 0
+                    ? config.contractTypes.map(ct =>
+                        CONTRACT_TYPES.find(c => c.value === ct)?.label || ct
+                      ).join(", ")
+                    : "None"}
+                </span>
+              </div>
+              <div className="border-t border-white/10 pt-3 mt-3">
+                <div className="flex justify-between items-center">
+                  <span className="text-white/60">Total Quotes</span>
+                  <span className="text-xl font-bold text-[#79d5e9]">{totalQuotes}</span>
+                </div>
+                <p className="text-xs text-white/40 mt-1">
+                  {selectedVehicles.length} × {config.terms.length} × {config.mileages.length} × {config.contractTypes.length} combinations
+                </p>
               </div>
             </div>
 
-            {/* Vehicle List */}
-            <div className="max-h-[350px] overflow-y-auto space-y-2">
-              {vehiclesLoading ? (
-                <div className="text-center py-8 text-white/40">
-                  <Loader2 className="h-5 w-5 animate-spin mx-auto" />
-                </div>
-              ) : filteredVehicles.length === 0 ? (
-                <div className="text-center py-8 text-white/40 text-sm">
-                  No vehicles with Lex codes found
-                </div>
-              ) : (
-                paginatedVehicles.map((vehicle) => {
-                  const inQueue = queue.some((q) => q.id === vehicle.id);
-                  return (
-                    <div
-                      key={vehicle.id}
-                      className={`p-3 rounded-lg border transition-colors cursor-pointer ${
-                        inQueue
-                          ? "bg-[#79d5e9]/10 border-[#79d5e9]/30"
-                          : "bg-white/5 border-white/10 hover:border-white/20"
-                      }`}
-                      onClick={() => !inQueue && addToQueue(vehicle)}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <div className="text-sm font-medium text-white">
-                            {vehicle.manufacturer} {vehicle.model}
-                          </div>
-                          <div className="text-xs text-white/50">
-                            {vehicle.variant} • {vehicle.fuel_type} • {vehicle.transmission}
-                          </div>
-                        </div>
-                        {inQueue ? (
-                          <CheckCircle2 className="h-4 w-4 text-[#79d5e9]" />
-                        ) : (
-                          <span className="text-xs text-white/40">Click to add</span>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })
-              )}
-            </div>
+            {/* Send Button */}
+            {selectedVehicles.length > 0 && !isProcessing && (
+              <button
+                onClick={saveQueueToServer}
+                disabled={totalQuotes === 0}
+                className="w-full mt-4 px-4 py-3 rounded-lg font-medium text-white flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                style={{
+                  background: totalQuotes > 0
+                    ? "linear-gradient(135deg, #79d5e9 0%, #5bc0d8 100%)"
+                    : "rgba(255,255,255,0.1)",
+                }}
+              >
+                <Play className="h-4 w-4" />
+                Generate {totalQuotes} Quote{totalQuotes !== 1 ? "s" : ""}
+              </button>
+            )}
 
-            {/* Pagination */}
-            {totalPages > 1 && (
-              <div className="flex items-center justify-between mt-4 pt-4 border-t border-white/10">
-                <span className="text-xs text-white/50">
-                  {filteredVehicles.length} vehicles
-                </span>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                    disabled={currentPage === 1}
-                    className="px-3 py-1 rounded text-xs bg-white/10 text-white disabled:opacity-30 disabled:cursor-not-allowed hover:bg-white/20"
-                  >
-                    Prev
-                  </button>
-                  <span className="text-xs text-white/70">
-                    {currentPage} / {totalPages}
-                  </span>
-                  <button
-                    onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                    disabled={currentPage === totalPages}
-                    className="px-3 py-1 rounded text-xs bg-white/10 text-white disabled:opacity-30 disabled:cursor-not-allowed hover:bg-white/20"
-                  >
-                    Next
-                  </button>
+            {isProcessing && (
+              <div className="mt-4 p-3 rounded-lg bg-[#79d5e9]/10 border border-[#79d5e9]/30">
+                <div className="flex items-center gap-2 text-[#79d5e9]">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <span className="text-sm">Sending to queue...</span>
                 </div>
               </div>
             )}
           </div>
 
-          {/* Right: Quote Config & Queue */}
-          <div className="space-y-4">
-            {/* Quote Configuration */}
-            <div
-              className="rounded-xl border p-4"
-              style={{ background: "rgba(26, 31, 42, 0.6)", borderColor: "rgba(255, 255, 255, 0.1)" }}
-            >
-              <h3 className="text-white font-medium mb-4">Quote Configuration</h3>
-
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <label className="text-xs text-white/50 mb-1 block">Term</label>
-                  <select
-                    value={config.term}
-                    onChange={(e) => setConfig({ ...config, term: parseInt(e.target.value) })}
-                    className="w-full px-3 py-2 rounded-lg text-sm bg-[#1a1f2a] border border-white/10 text-white [&>option]:bg-[#1a1f2a] [&>option]:text-white"
-                  >
-                    {TERMS.map((t) => (
-                      <option key={t} value={t}>
-                        {t} months
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="text-xs text-white/50 mb-1 block">Annual Mileage</label>
-                  <select
-                    value={config.mileage}
-                    onChange={(e) => setConfig({ ...config, mileage: parseInt(e.target.value) })}
-                    className="w-full px-3 py-2 rounded-lg text-sm bg-[#1a1f2a] border border-white/10 text-white [&>option]:bg-[#1a1f2a] [&>option]:text-white"
-                  >
-                    {MILEAGES.map((m) => (
-                      <option key={m} value={m}>
-                        {m.toLocaleString()} mi
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="text-xs text-white/50 mb-1 block">Contract</label>
-                  <select
-                    value={config.contractType}
-                    onChange={(e) => setConfig({ ...config, contractType: e.target.value })}
-                    className="w-full px-3 py-2 rounded-lg text-sm bg-[#1a1f2a] border border-white/10 text-white [&>option]:bg-[#1a1f2a] [&>option]:text-white"
-                  >
-                    {CONTRACT_TYPES.map((ct) => (
-                      <option key={ct.value} value={ct.value}>
-                        {ct.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-            </div>
-
-            {/* Queue */}
-            <div
-              className="rounded-xl border p-4"
-              style={{ background: "rgba(26, 31, 42, 0.6)", borderColor: "rgba(255, 255, 255, 0.1)" }}
-            >
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-white font-medium">Quote Queue ({queue.length})</h3>
-                {queue.length > 0 && (
-                  <button
-                    onClick={clearQueue}
-                    className="text-xs text-red-400 hover:text-red-300 flex items-center gap-1"
-                  >
-                    <Trash2 className="h-3 w-3" />
-                    Clear
-                  </button>
-                )}
-              </div>
-
-              {queue.length === 0 ? (
-                <div className="text-center py-8 text-white/40 text-sm">
-                  Select vehicles to add to queue
-                </div>
-              ) : (
-                <div className="space-y-2 max-h-[250px] overflow-y-auto">
-                  {queue.map((item) => (
-                    <div
-                      key={item.id}
-                      className="p-3 rounded-lg bg-white/5 border border-white/10 flex items-center gap-3"
-                    >
-                      <div className="flex-1 min-w-0">
-                        <div className="text-sm font-medium text-white truncate">
-                          {item.manufacturer} {item.model}
-                        </div>
-                        <div className="text-xs text-white/50">
-                          {item.config.term}mo • {item.config.mileage.toLocaleString()}mi
-                        </div>
-                      </div>
-
-                      {item.status === "pending" && (
-                        <button
-                          onClick={() => removeFromQueue(item.id)}
-                          className="p-1 rounded hover:bg-white/10"
-                        >
-                          <Trash2 className="h-4 w-4 text-white/40" />
-                        </button>
-                      )}
-
-                      {item.status === "running" && (
-                        <Loader2 className="h-4 w-4 text-[#79d5e9] animate-spin" />
-                      )}
-
-                      {item.status === "complete" && item.result && (
-                        <div className="text-right">
-                          <div className="text-sm font-medium text-green-400">
-                            £{item.result.monthlyRental?.toFixed(2)}/mo
-                          </div>
-                        </div>
-                      )}
-
-                      {item.status === "error" && (
-                        <AlertCircle className="h-4 w-4 text-red-400" />
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {/* Run Button */}
-              {queue.length > 0 && !isProcessing && (
-                <button
-                  onClick={saveQueueToServer}
-                  className="w-full mt-4 px-4 py-3 rounded-lg font-medium text-white flex items-center justify-center gap-2"
-                  style={{
-                    background: "linear-gradient(135deg, #79d5e9 0%, #5bc0d8 100%)",
-                  }}
-                >
-                  <Play className="h-4 w-4" />
-                  Run {queue.length} Quote{queue.length > 1 ? "s" : ""} via Extension
-                </button>
-              )}
-
-              {isProcessing && (
-                <div className="mt-4 p-3 rounded-lg bg-[#79d5e9]/10 border border-[#79d5e9]/30">
-                  <div className="flex items-center gap-2 text-[#79d5e9]">
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    <span className="text-sm">
-                      Processing quotes... Open the extension to run them.
-                    </span>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Extension Info */}
-            <div className="p-4 bg-blue-500/10 border border-blue-500/20 rounded-xl">
-              <p className="text-sm text-blue-300">
-                <strong>How it works:</strong> Click &quot;Run Quotes&quot; to queue vehicles,
-                then open the Chrome extension and click &quot;Process Queue&quot; to fetch quotes
-                from your browser.
-              </p>
-            </div>
+          {/* Info */}
+          <div className="p-4 bg-blue-500/10 border border-blue-500/20 rounded-xl">
+            <p className="text-sm text-blue-300">
+              <strong>How it works:</strong> Select vehicles and configure options above.
+              The system generates all term × mileage × contract combinations.
+              Process the queue from the browser extension sidepanel.
+            </p>
           </div>
         </div>
-      )}
+      </div>
     </div>
   );
 }

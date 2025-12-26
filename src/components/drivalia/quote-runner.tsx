@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   Loader2,
   CheckCircle2,
@@ -10,6 +10,9 @@ import {
   Car,
   Play,
   Trash2,
+  Calculator,
+  Settings2,
+  X,
 } from "lucide-react";
 
 type Vehicle = {
@@ -27,22 +30,93 @@ type Vehicle = {
 };
 
 type QuoteConfig = {
-  term: number;
-  mileage: number;
-  contractType: string;
-};
-
-type QueuedVehicle = Vehicle & {
-  config: QuoteConfig;
+  terms: number[];
+  mileages: number[];
+  contractTypes: string[];
 };
 
 const TERMS = [24, 36, 48, 60];
 const MILEAGES = [5000, 8000, 10000, 12000, 15000, 20000, 25000, 30000];
 const CONTRACT_TYPES = [
-  { value: "BCH", label: "Business Contract Hire" },
-  { value: "BCHNM", label: "BCH (No Maintenance)" },
-  { value: "PCH", label: "Personal Contract Hire" },
+  { value: "BCH", label: "Business CH" },
+  { value: "BCHNM", label: "BCH (No Maint)" },
+  { value: "PCH", label: "Personal CH" },
 ];
+
+// Multi-select chip component
+function ChipSelect<T extends string | number>({
+  options,
+  selected,
+  onChange,
+  renderLabel,
+  color = "pink",
+}: {
+  options: T[];
+  selected: T[];
+  onChange: (selected: T[]) => void;
+  renderLabel: (option: T) => string;
+  color?: "pink" | "cyan";
+}) {
+  const toggle = (option: T) => {
+    if (selected.includes(option)) {
+      onChange(selected.filter((s) => s !== option));
+    } else {
+      onChange([...selected, option]);
+    }
+  };
+
+  const selectAll = () => onChange([...options]);
+  const clearAll = () => onChange([]);
+
+  const colorClasses = {
+    pink: {
+      selected: "bg-pink-500/30 border-pink-500/50 text-pink-300",
+      unselected: "bg-white/5 border-white/10 text-white/60 hover:border-white/30",
+    },
+    cyan: {
+      selected: "bg-[#79d5e9]/30 border-[#79d5e9]/50 text-[#79d5e9]",
+      unselected: "bg-white/5 border-white/10 text-white/60 hover:border-white/30",
+    },
+  };
+
+  return (
+    <div className="space-y-2">
+      <div className="flex flex-wrap gap-2">
+        {options.map((option) => {
+          const isSelected = selected.includes(option);
+          return (
+            <button
+              key={String(option)}
+              onClick={() => toggle(option)}
+              className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-all ${
+                isSelected
+                  ? colorClasses[color].selected
+                  : colorClasses[color].unselected
+              }`}
+            >
+              {renderLabel(option)}
+            </button>
+          );
+        })}
+      </div>
+      <div className="flex gap-2">
+        <button
+          onClick={selectAll}
+          className="text-xs text-white/40 hover:text-white/60 transition-colors"
+        >
+          Select all
+        </button>
+        <span className="text-white/20">•</span>
+        <button
+          onClick={clearAll}
+          className="text-xs text-white/40 hover:text-white/60 transition-colors"
+        >
+          Clear
+        </button>
+      </div>
+    </div>
+  );
+}
 
 export function DrivaliaQuoteRunner({ onQuotesComplete }: { onQuotesComplete?: () => void }) {
   // Vehicle search
@@ -54,17 +128,27 @@ export function DrivaliaQuoteRunner({ onQuotesComplete }: { onQuotesComplete?: (
   const [currentPage, setCurrentPage] = useState(1);
   const ITEMS_PER_PAGE = 20;
 
-  // Quote configuration
+  // Quote configuration - now multi-select
   const [config, setConfig] = useState<QuoteConfig>({
-    term: 36,
-    mileage: 10000,
-    contractType: "BCH",
+    terms: [36],
+    mileages: [10000],
+    contractTypes: ["BCH"],
   });
 
-  // Queue
-  const [queue, setQueue] = useState<QueuedVehicle[]>([]);
+  // Selected vehicles (not queued yet)
+  const [selectedVehicles, setSelectedVehicles] = useState<Vehicle[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [queueSent, setQueueSent] = useState(false);
+
+  // Calculate total quotes
+  const totalQuotes = useMemo(() => {
+    return (
+      selectedVehicles.length *
+      config.terms.length *
+      config.mileages.length *
+      config.contractTypes.length
+    );
+  }, [selectedVehicles.length, config.terms.length, config.mileages.length, config.contractTypes.length]);
 
   // Fetch vehicles with CAP codes
   const fetchVehicles = async () => {
@@ -79,9 +163,7 @@ export function DrivaliaQuoteRunner({ onQuotesComplete }: { onQuotesComplete?: (
       const response = await fetch(`/api/vehicles?${params}`);
       const data = await response.json();
 
-      // Filter to only vehicles with CAP codes
       const vehiclesWithCap = (data.vehicles || []).filter((v: Vehicle) => v.capCode);
-
       setVehicles(vehiclesWithCap);
       if (!makes.length && data.makes) setMakes(data.makes);
     } catch (error) {
@@ -119,27 +201,23 @@ export function DrivaliaQuoteRunner({ onQuotesComplete }: { onQuotesComplete?: (
     setCurrentPage(1);
   }, [selectedMake, searchQuery]);
 
-  // Add vehicle to queue
-  const addToQueue = (vehicle: Vehicle) => {
-    if (queue.some((q) => q.id === vehicle.id)) return;
-
-    setQueue([
-      ...queue,
-      {
-        ...vehicle,
-        config: { ...config },
-      },
-    ]);
+  // Toggle vehicle selection
+  const toggleVehicle = (vehicle: Vehicle) => {
+    if (selectedVehicles.some((v) => v.id === vehicle.id)) {
+      setSelectedVehicles(selectedVehicles.filter((v) => v.id !== vehicle.id));
+    } else {
+      setSelectedVehicles([...selectedVehicles, vehicle]);
+    }
   };
 
-  // Remove from queue
-  const removeFromQueue = (vehicleId: string) => {
-    setQueue(queue.filter((q) => q.id !== vehicleId));
+  // Remove from selected
+  const removeVehicle = (vehicleId: string) => {
+    setSelectedVehicles(selectedVehicles.filter((v) => v.id !== vehicleId));
   };
 
-  // Clear queue
-  const clearQueue = () => {
-    setQueue([]);
+  // Clear all
+  const clearAll = () => {
+    setSelectedVehicles([]);
     setQueueSent(false);
   };
 
@@ -151,33 +229,57 @@ export function DrivaliaQuoteRunner({ onQuotesComplete }: { onQuotesComplete?: (
     );
   };
 
-  // Send queue to API for extension to process
+  // Generate all quote combinations and send to API
   const sendQueueToApi = async () => {
-    if (queue.length === 0) return;
+    if (selectedVehicles.length === 0) return;
+    if (config.terms.length === 0 || config.mileages.length === 0 || config.contractTypes.length === 0) {
+      alert("Please select at least one option for Term, Mileage, and Contract Type");
+      return;
+    }
 
     setIsProcessing(true);
 
     try {
+      // Generate all combinations
+      const items: {
+        vehicleId: string;
+        capCode: string;
+        manufacturer: string;
+        model: string;
+        variant: string;
+        term: number;
+        mileage: number;
+        contractType: string;
+      }[] = [];
+
+      for (const vehicle of selectedVehicles) {
+        for (const term of config.terms) {
+          for (const mileage of config.mileages) {
+            for (const contractType of config.contractTypes) {
+              items.push({
+                vehicleId: vehicle.id,
+                capCode: vehicle.capCode,
+                manufacturer: vehicle.manufacturer,
+                model: vehicle.model,
+                variant: vehicle.variant,
+                term,
+                mileage,
+                contractType,
+              });
+            }
+          }
+        }
+      }
+
       const response = await fetch("/api/drivalia/quote-queue", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          items: queue.map((item) => ({
-            vehicleId: item.id,
-            capCode: item.capCode,
-            manufacturer: item.manufacturer,
-            model: item.model,
-            variant: item.variant,
-            term: item.config.term,
-            mileage: item.config.mileage,
-            contractType: item.config.contractType,
-          })),
-        }),
+        body: JSON.stringify({ items }),
       });
 
       if (response.ok) {
         setQueueSent(true);
-        setQueue([]);
+        setSelectedVehicles([]);
         onQuotesComplete?.();
       } else {
         const data = await response.json();
@@ -235,7 +337,7 @@ export function DrivaliaQuoteRunner({ onQuotesComplete }: { onQuotesComplete?: (
           <AlertCircle className="h-5 w-5 text-pink-400" />
           <div className="flex-1">
             <span className="text-pink-300">
-              Select vehicles below, then click &quot;Send to Queue&quot;. Process the queue from the browser extension sidepanel.
+              Select vehicles and quote options below. The system will generate all combinations automatically.
             </span>
           </div>
           <button
@@ -247,7 +349,72 @@ export function DrivaliaQuoteRunner({ onQuotesComplete }: { onQuotesComplete?: (
         </div>
       </div>
 
-      {/* Main UI */}
+      {/* Quote Configuration - Full Width */}
+      <div
+        className="rounded-xl border p-5"
+        style={{ background: "rgba(26, 31, 42, 0.6)", borderColor: "rgba(255, 255, 255, 0.1)" }}
+      >
+        <h3 className="text-white font-medium mb-4 flex items-center gap-2">
+          <Settings2 className="h-4 w-4 text-pink-400" />
+          Quote Configuration
+          <span className="text-xs text-white/40 ml-2">Select multiple options per category</span>
+        </h3>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {/* Terms */}
+          <div>
+            <label className="text-sm text-white/70 mb-2 block font-medium">
+              Contract Term
+              {config.terms.length > 0 && (
+                <span className="text-pink-400 ml-2">({config.terms.length} selected)</span>
+              )}
+            </label>
+            <ChipSelect
+              options={TERMS}
+              selected={config.terms}
+              onChange={(terms) => setConfig({ ...config, terms })}
+              renderLabel={(t) => `${t} mo`}
+              color="pink"
+            />
+          </div>
+
+          {/* Mileages */}
+          <div>
+            <label className="text-sm text-white/70 mb-2 block font-medium">
+              Annual Mileage
+              {config.mileages.length > 0 && (
+                <span className="text-pink-400 ml-2">({config.mileages.length} selected)</span>
+              )}
+            </label>
+            <ChipSelect
+              options={MILEAGES}
+              selected={config.mileages}
+              onChange={(mileages) => setConfig({ ...config, mileages })}
+              renderLabel={(m) => `${(m / 1000).toFixed(0)}k`}
+              color="pink"
+            />
+          </div>
+
+          {/* Contract Types */}
+          <div>
+            <label className="text-sm text-white/70 mb-2 block font-medium">
+              Contract Type
+              {config.contractTypes.length > 0 && (
+                <span className="text-pink-400 ml-2">({config.contractTypes.length} selected)</span>
+              )}
+            </label>
+            <ChipSelect
+              options={CONTRACT_TYPES.map((ct) => ct.value)}
+              selected={config.contractTypes}
+              onChange={(contractTypes) => setConfig({ ...config, contractTypes })}
+              renderLabel={(v) => CONTRACT_TYPES.find((ct) => ct.value === v)?.label || v}
+              color="pink"
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Main Content - Two Columns */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Left: Vehicle Picker */}
         <div
@@ -257,6 +424,9 @@ export function DrivaliaQuoteRunner({ onQuotesComplete }: { onQuotesComplete?: (
           <h3 className="text-white font-medium mb-4 flex items-center gap-2">
             <Car className="h-4 w-4 text-pink-400" />
             Select Vehicles
+            <span className="text-xs text-white/40 ml-2">
+              {filteredVehicles.length} available
+            </span>
           </h3>
 
           {/* Filters */}
@@ -298,16 +468,16 @@ export function DrivaliaQuoteRunner({ onQuotesComplete }: { onQuotesComplete?: (
               </div>
             ) : (
               paginatedVehicles.map((vehicle) => {
-                const inQueue = queue.some((q) => q.id === vehicle.id);
+                const isSelected = selectedVehicles.some((v) => v.id === vehicle.id);
                 return (
                   <div
                     key={vehicle.id}
                     className={`p-3 rounded-lg border transition-colors cursor-pointer ${
-                      inQueue
+                      isSelected
                         ? "bg-pink-500/10 border-pink-500/30"
                         : "bg-white/5 border-white/10 hover:border-white/20"
                     }`}
-                    onClick={() => !inQueue && addToQueue(vehicle)}
+                    onClick={() => toggleVehicle(vehicle)}
                   >
                     <div className="flex items-center justify-between">
                       <div>
@@ -321,7 +491,7 @@ export function DrivaliaQuoteRunner({ onQuotesComplete }: { onQuotesComplete?: (
                           {vehicle.capCode}
                         </div>
                       </div>
-                      {inQueue ? (
+                      {isSelected ? (
                         <CheckCircle2 className="h-4 w-4 text-pink-400" />
                       ) : (
                         <span className="text-xs text-white/40">Click to add</span>
@@ -362,125 +532,117 @@ export function DrivaliaQuoteRunner({ onQuotesComplete }: { onQuotesComplete?: (
           )}
         </div>
 
-        {/* Right: Quote Config & Queue */}
+        {/* Right: Selected Vehicles & Summary */}
         <div className="space-y-4">
-          {/* Quote Configuration */}
-          <div
-            className="rounded-xl border p-4"
-            style={{ background: "rgba(26, 31, 42, 0.6)", borderColor: "rgba(255, 255, 255, 0.1)" }}
-          >
-            <h3 className="text-white font-medium mb-4">Quote Configuration</h3>
-
-            <div className="grid grid-cols-3 gap-3">
-              <div>
-                <label className="text-xs text-white/50 mb-1 block">Term</label>
-                <select
-                  value={config.term}
-                  onChange={(e) => setConfig({ ...config, term: parseInt(e.target.value) })}
-                  className="w-full px-3 py-2 rounded-lg text-sm bg-[#1a1f2a] border border-white/10 text-white [&>option]:bg-[#1a1f2a] [&>option]:text-white"
-                >
-                  {TERMS.map((t) => (
-                    <option key={t} value={t}>
-                      {t} months
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="text-xs text-white/50 mb-1 block">Annual Mileage</label>
-                <select
-                  value={config.mileage}
-                  onChange={(e) => setConfig({ ...config, mileage: parseInt(e.target.value) })}
-                  className="w-full px-3 py-2 rounded-lg text-sm bg-[#1a1f2a] border border-white/10 text-white [&>option]:bg-[#1a1f2a] [&>option]:text-white"
-                >
-                  {MILEAGES.map((m) => (
-                    <option key={m} value={m}>
-                      {m.toLocaleString()} mi
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="text-xs text-white/50 mb-1 block">Contract</label>
-                <select
-                  value={config.contractType}
-                  onChange={(e) => setConfig({ ...config, contractType: e.target.value })}
-                  className="w-full px-3 py-2 rounded-lg text-sm bg-[#1a1f2a] border border-white/10 text-white [&>option]:bg-[#1a1f2a] [&>option]:text-white"
-                >
-                  {CONTRACT_TYPES.map((ct) => (
-                    <option key={ct.value} value={ct.value}>
-                      {ct.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-          </div>
-
-          {/* Queue */}
+          {/* Selected Vehicles */}
           <div
             className="rounded-xl border p-4"
             style={{ background: "rgba(26, 31, 42, 0.6)", borderColor: "rgba(255, 255, 255, 0.1)" }}
           >
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-white font-medium">Quote Queue ({queue.length})</h3>
-              {queue.length > 0 && !isProcessing && (
+              <h3 className="text-white font-medium">
+                Selected Vehicles ({selectedVehicles.length})
+              </h3>
+              {selectedVehicles.length > 0 && !isProcessing && (
                 <button
-                  onClick={clearQueue}
+                  onClick={clearAll}
                   className="text-xs text-red-400 hover:text-red-300 flex items-center gap-1"
                 >
                   <Trash2 className="h-3 w-3" />
-                  Clear
+                  Clear All
                 </button>
               )}
             </div>
 
-            {queue.length === 0 ? (
+            {selectedVehicles.length === 0 ? (
               <div className="text-center py-8 text-white/40 text-sm">
-                Select vehicles to add to queue
+                Click vehicles on the left to select them
               </div>
             ) : (
-              <div className="space-y-2 max-h-[250px] overflow-y-auto">
-                {queue.map((item) => (
+              <div className="space-y-2 max-h-[200px] overflow-y-auto">
+                {selectedVehicles.map((vehicle) => (
                   <div
-                    key={item.id}
-                    className="p-3 rounded-lg bg-white/5 border border-white/10 flex items-center gap-3"
+                    key={vehicle.id}
+                    className="p-2 rounded-lg bg-white/5 border border-white/10 flex items-center gap-2"
                   >
                     <div className="flex-1 min-w-0">
                       <div className="text-sm font-medium text-white truncate">
-                        {item.manufacturer} {item.model}
+                        {vehicle.manufacturer} {vehicle.model}
                       </div>
-                      <div className="text-xs text-white/50">
-                        {item.config.term}mo | {item.config.mileage.toLocaleString()}mi | {item.config.contractType}
+                      <div className="text-xs text-white/50 truncate">
+                        {vehicle.variant}
                       </div>
                     </div>
-
-                    {!isProcessing && (
-                      <button
-                        onClick={() => removeFromQueue(item.id)}
-                        className="p-1 rounded hover:bg-white/10"
-                      >
-                        <Trash2 className="h-4 w-4 text-white/40" />
-                      </button>
-                    )}
+                    <button
+                      onClick={() => removeVehicle(vehicle.id)}
+                      className="p-1 rounded hover:bg-white/10 text-white/40 hover:text-white/60"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
                   </div>
                 ))}
               </div>
             )}
+          </div>
+
+          {/* Quote Summary */}
+          <div
+            className="rounded-xl border p-4"
+            style={{ background: "rgba(26, 31, 42, 0.6)", borderColor: "rgba(255, 255, 255, 0.1)" }}
+          >
+            <h3 className="text-white font-medium mb-4 flex items-center gap-2">
+              <Calculator className="h-4 w-4 text-pink-400" />
+              Quote Summary
+            </h3>
+
+            <div className="space-y-3 text-sm">
+              <div className="flex justify-between">
+                <span className="text-white/60">Vehicles</span>
+                <span className="text-white font-medium">{selectedVehicles.length}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-white/60">Terms</span>
+                <span className="text-white font-medium">
+                  {config.terms.length > 0 ? config.terms.map(t => `${t}mo`).join(", ") : "None"}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-white/60">Mileages</span>
+                <span className="text-white font-medium">
+                  {config.mileages.length > 0 ? config.mileages.map(m => `${m/1000}k`).join(", ") : "None"}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-white/60">Contracts</span>
+                <span className="text-white font-medium">
+                  {config.contractTypes.length > 0 ? config.contractTypes.join(", ") : "None"}
+                </span>
+              </div>
+              <div className="border-t border-white/10 pt-3 mt-3">
+                <div className="flex justify-between items-center">
+                  <span className="text-white/60">Total Quotes</span>
+                  <span className="text-xl font-bold text-pink-400">{totalQuotes}</span>
+                </div>
+                <p className="text-xs text-white/40 mt-1">
+                  {selectedVehicles.length} × {config.terms.length} × {config.mileages.length} × {config.contractTypes.length} combinations
+                </p>
+              </div>
+            </div>
 
             {/* Send Button */}
-            {queue.length > 0 && !isProcessing && (
+            {selectedVehicles.length > 0 && !isProcessing && (
               <button
                 onClick={sendQueueToApi}
-                className="w-full mt-4 px-4 py-3 rounded-lg font-medium text-white flex items-center justify-center gap-2"
+                disabled={totalQuotes === 0}
+                className="w-full mt-4 px-4 py-3 rounded-lg font-medium text-white flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                 style={{
-                  background: "linear-gradient(135deg, #ec4899 0%, #db2777 100%)",
+                  background: totalQuotes > 0
+                    ? "linear-gradient(135deg, #ec4899 0%, #db2777 100%)"
+                    : "rgba(255,255,255,0.1)",
                 }}
               >
                 <Play className="h-4 w-4" />
-                Send {queue.length} to Queue
+                Generate {totalQuotes} Quote{totalQuotes !== 1 ? "s" : ""}
               </button>
             )}
 
@@ -497,8 +659,9 @@ export function DrivaliaQuoteRunner({ onQuotesComplete }: { onQuotesComplete?: (
           {/* Info */}
           <div className="p-4 bg-pink-500/10 border border-pink-500/20 rounded-xl">
             <p className="text-sm text-pink-300">
-              <strong>How it works:</strong> Select vehicles, configure quote settings, then click &quot;Send to Queue&quot;.
-              Open the extension sidepanel and switch to Drivalia tab to process the queue.
+              <strong>How it works:</strong> Select vehicles and configure options above.
+              The system generates all term × mileage × contract combinations.
+              Process the queue from the browser extension sidepanel.
             </p>
           </div>
         </div>
