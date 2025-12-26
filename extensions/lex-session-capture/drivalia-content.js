@@ -329,16 +329,15 @@ async function runQuote({ capCode, term, mileage, contractType, companyName = 'Q
     // Step 5: Search for vehicle by CAP code (from Playwright: getByRole('textbox', { name: 'Search a Vehicle' }))
     console.log('[Drivalia] Searching for CAP code:', capCode);
 
-    // Try multiple selectors for vehicle search input
+    // Try multiple selectors for vehicle search input (in the modal, not global banner search)
     const searchSelectors = [
-      'input[aria-label*="Search a Vehicle"]',
-      'input[aria-label*="Search"]',
-      'input[data-hook*="search"]',
-      'input[placeholder*="Search"]',
-      'input[placeholder*="search"]',
-      '.mat-dialog-content input[type="text"]',
-      'mat-dialog-container input',
-      'pos-vehicle-search input'
+      'input[data-hook="asset.search.criteria.search.input"]',  // Correct vehicle search input
+      'input[data-hook*="asset.search"]',
+      '.search__query',
+      'mat-dialog-container input[data-hook*="search"]',
+      'mat-dialog-container .search__query',
+      'pos-vehicle-search input',
+      'input[aria-label*="Search a Vehicle"]'
     ];
 
     let vehicleSearchInput = null;
