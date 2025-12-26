@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Lex Quote Automation",
-  "version": "2.1.0",
-  "description": "Automate Lex Autolease quotes for SplitLease",
+  "name": "SplitLease Quote Automation",
+  "version": "3.0.0",
+  "description": "Automate quotes from Lex Autolease and Drivalia for SplitLease",
   "permissions": [
     "activeTab",
     "cookies",
@@ -14,6 +14,7 @@
   },
   "host_permissions": [
     "https://associate.lexautolease.co.uk/*",
+    "https://www.caafgenus3.co.uk/*",
     "https://splitlease.netlify.app/*"
   ],
   "background": {
@@ -24,10 +25,15 @@
       "matches": ["https://associate.lexautolease.co.uk/*"],
       "js": ["content.js"],
       "run_at": "document_start"
+    },
+    {
+      "matches": ["https://www.caafgenus3.co.uk/*"],
+      "js": ["drivalia-content.js"],
+      "run_at": "document_idle"
     }
   ],
   "action": {
-    "default_title": "Open Lex Quote Automation",
+    "default_title": "Open Quote Automation",
     "default_icon": {
       "16": "icon16.png",
       "48": "icon48.png",
