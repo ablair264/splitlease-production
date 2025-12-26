@@ -219,28 +219,85 @@ async function runQuote({ capCode, term, mileage, contractType, companyName = 'Q
     await sleep(1500);
 
     // Step 1: Set Customer Type using data-hook selector (from Playwright recording)
-    // The select element has data-hook="quoting.customer.customertype"
+    // The select element has data-hook="quoting.customer.customertype" and uses AngularJS
     console.log('[Drivalia] Setting customer type...');
     const customerTypeSelect = await waitForElement('select[data-hook="quoting.customer.customertype"]', 15000);
 
     // Determine customer type based on contract type
     // PCH = Personal, BCH/CH = Company
     const customerTypeValue = contractType === 'PCH' ? 'string:I' : 'string:C';
-    customerTypeSelect.value = customerTypeValue;
+
+    // For AngularJS, we need to properly trigger the ng-change
+    // Use the native setter and dispatch multiple events to ensure Angular picks it up
+    customerTypeSelect.focus();
+    await sleep(100);
+
+    // Find and click the correct option to simulate real user selection
+    const options = customerTypeSelect.querySelectorAll('option');
+    for (const option of options) {
+      if (option.value === customerTypeValue) {
+        option.selected = true;
+        break;
+      }
+    }
+
+    // Trigger all the events Angular might be listening to
+    customerTypeSelect.dispatchEvent(new Event('input', { bubbles: true }));
     customerTypeSelect.dispatchEvent(new Event('change', { bubbles: true }));
-    await sleep(500);
+    customerTypeSelect.dispatchEvent(new Event('blur', { bubbles: true }));
+
+    // Also try triggering Angular's internal change detection
+    if (window.angular) {
+      const scope = window.angular.element(customerTypeSelect).scope();
+      if (scope) {
+        scope.$apply(() => {
+          scope.customer.data.customerType = customerTypeValue.replace('string:', '');
+          if (scope.typeChanged) scope.typeChanged();
+        });
+      }
+    }
+
+    console.log('[Drivalia] Customer type set to:', customerTypeValue);
+    await sleep(1000); // Wait for Angular to update the form
 
     // Step 2: Click "Customer" link to expand section (from Playwright: getByRole('link', { name: 'Customer' }))
     console.log('[Drivalia] Expanding Customer section...');
     const customerLink = await findByRole('link', 'Customer');
     clickElement(customerLink);
-    await sleep(500);
+    await sleep(800);
 
     // Step 3: Enter company name (from Playwright: getByRole('textbox', { name: 'Company Name*' }))
     console.log('[Drivalia] Entering company name...');
-    const companyInput = await findByRole('textbox', 'Company Name');
-    triggerAngularInput(companyInput, companyName);
-    await sleep(300);
+
+    // Try multiple selectors for company name input
+    let companyInput = null;
+    const companySelectors = [
+      'input[aria-label*="Company Name"]',
+      'input[data-hook*="company"]',
+      'input[placeholder*="Company"]',
+      'input[ng-model*="companyName"]',
+      'input[ng-model*="company"]'
+    ];
+
+    for (const selector of companySelectors) {
+      companyInput = document.querySelector(selector);
+      if (companyInput) {
+        console.log('[Drivalia] Found company input with:', selector);
+        break;
+      }
+    }
+
+    // Fallback to findByRole if direct selectors fail
+    if (!companyInput) {
+      companyInput = await findByRole('textbox', 'Company Name', 5000).catch(() => null);
+    }
+
+    if (companyInput) {
+      triggerAngularInput(companyInput, companyName);
+      await sleep(300);
+    } else {
+      console.warn('[Drivalia] Company name input not found, continuing anyway');
+    }
 
     // Collapse Customer section by clicking link again
     clickElement(customerLink);
