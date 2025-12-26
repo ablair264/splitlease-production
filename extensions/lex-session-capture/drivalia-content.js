@@ -18,9 +18,11 @@ window.addEventListener('message', (event) => {
 
 // Helper to send commands to MAIN world script for Angular interactions
 function angularCommand(command, selector, value) {
+  console.log('[Drivalia] Sending Angular command:', command, selector);
   return new Promise((resolve) => {
     const handler = (event) => {
       if (event.data?.type === 'DRIVALIA_ANGULAR_RESULT') {
+        console.log('[Drivalia] Received Angular result:', event.data);
         window.removeEventListener('message', handler);
         resolve(event.data);
       }
@@ -36,6 +38,7 @@ function angularCommand(command, selector, value) {
 
     // Timeout after 3 seconds
     setTimeout(() => {
+      console.log('[Drivalia] Angular command timed out for:', command, selector);
       window.removeEventListener('message', handler);
       resolve({ success: false, error: 'timeout' });
     }, 3000);

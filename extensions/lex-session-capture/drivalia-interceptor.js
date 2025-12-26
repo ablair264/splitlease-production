@@ -1,6 +1,8 @@
 // Drivalia Response Interceptor & Angular Helper - runs in MAIN world (page context)
 // This script has access to window.angular and can interact with AngularJS
 (function() {
+  console.log('[Drivalia MAIN] Interceptor script loaded in MAIN world');
+  console.log('[Drivalia MAIN] window.angular available:', !!window.angular);
   // Helper to check if URL should be intercepted
   function shouldIntercept(url) {
     if (!url || typeof url !== 'string') return false;
