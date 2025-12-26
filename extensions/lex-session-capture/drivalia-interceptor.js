@@ -1,6 +1,13 @@
 // Drivalia Response Interceptor - injected into page context
 // This is loaded as an external script to comply with CSP
 (function() {
+  // Helper to check if URL should be intercepted
+  function shouldIntercept(url) {
+    if (!url || typeof url !== 'string') return false;
+    // Intercept both /calculate/ (for pricing data) and /application/ (for saved quotes)
+    return url.includes('/calculate/') || url.includes('/application/');
+  }
+
   // Store original fetch
   const originalFetch = window.fetch;
 
@@ -8,15 +15,14 @@
     return originalFetch.apply(this, args).then(response => {
       const url = args[0]?.url || args[0];
 
-      // Intercept quote save responses (URL contains the quote number)
-      if (url && typeof url === 'string' && url.includes('/application/')) {
+      if (shouldIntercept(url)) {
         response.clone().json().then(data => {
           window.postMessage({
             type: 'DRIVALIA_QUOTE_RESPONSE',
             data: data,
             url: url
           }, '*');
-          console.log('[Drivalia] Intercepted quote response:', url);
+          console.log('[Drivalia] Intercepted fetch response:', url);
         }).catch(() => {});
       }
 
@@ -35,8 +41,7 @@
 
   XMLHttpRequest.prototype.send = function() {
     this.addEventListener('load', function() {
-      // Intercept application/quote responses
-      if (this._drivaliaUrl && this._drivaliaUrl.includes('/application/')) {
+      if (shouldIntercept(this._drivaliaUrl)) {
         try {
           const data = JSON.parse(this.responseText);
           window.postMessage({
@@ -44,12 +49,12 @@
             data: data,
             url: this._drivaliaUrl
           }, '*');
-          console.log('[Drivalia] Intercepted XHR quote response');
+          console.log('[Drivalia] Intercepted XHR response:', this._drivaliaUrl);
         } catch (e) {}
       }
     });
     return originalSend.apply(this, arguments);
   };
 
-  console.log('[Drivalia] Response interceptor installed');
+  console.log('[Drivalia] Response interceptor installed (captures /calculate/ and /application/)');
 })();

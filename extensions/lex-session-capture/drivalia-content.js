@@ -39,11 +39,12 @@ if (document.readyState === 'loading') {
 }
 
 // Product codes for different contract types
+// Updated from Playwright recording - exact product names in the modal
 const PRODUCT_PATTERNS = {
-  'BCH': 'BROKER BCH',           // Business Contract Hire
-  'BCHNM': 'BROKER BCH',         // BCH No Maintenance (same product, diff option)
-  'PCH': 'BROKER PCH',           // Personal Contract Hire
-  'CH': 'BCH'                    // Contract Hire
+  'BCH': 'DRIVALIA - ALL BRANDS DISCOUNT BROKER BCH',    // Business Contract Hire
+  'BCHNM': 'DRIVALIA - ALL BRANDS DISCOUNT BROKER BCH',  // BCH No Maintenance
+  'PCH': 'DRIVALIA - ALL BRANDS DISCOUNT BROKER PCH',    // Personal Contract Hire
+  'CH': 'DRIVALIA - ALL BRANDS DISCOUNT BROKER BCH'      // Contract Hire
 };
 
 // Helper functions
@@ -105,6 +106,78 @@ function waitForElementByText(text, tagName = '*', timeout = 10000) {
   });
 }
 
+// Find element by aria-label (Playwright getByLabel equivalent)
+function findByLabel(label, tagName = '*') {
+  const elements = document.querySelectorAll(tagName);
+  for (const el of elements) {
+    const ariaLabel = el.getAttribute('aria-label');
+    if (ariaLabel?.includes(label)) return el;
+
+    // Also check associated label elements
+    const id = el.id;
+    if (id) {
+      const labelEl = document.querySelector(`label[for="${id}"]`);
+      if (labelEl?.textContent?.includes(label)) return el;
+    }
+  }
+  return null;
+}
+
+// Find element by role and name (Playwright getByRole equivalent)
+function findByRole(role, name, timeout = 10000) {
+  return new Promise((resolve, reject) => {
+    const checkElement = () => {
+      let selector;
+      switch (role) {
+        case 'link':
+          selector = 'a, [role="link"]';
+          break;
+        case 'button':
+          selector = 'button, [role="button"]';
+          break;
+        case 'textbox':
+          selector = 'input[type="text"], input:not([type]), textarea, [role="textbox"]';
+          break;
+        case 'spinbutton':
+          selector = 'input[type="number"], [role="spinbutton"]';
+          break;
+        default:
+          selector = `[role="${role}"]`;
+      }
+
+      const elements = document.querySelectorAll(selector);
+      for (const el of elements) {
+        const ariaLabel = el.getAttribute('aria-label') || '';
+        const textContent = el.textContent?.trim() || '';
+        const placeholder = el.getAttribute('placeholder') || '';
+
+        if (ariaLabel.includes(name) || textContent.includes(name) || placeholder.includes(name)) {
+          return el;
+        }
+      }
+      return null;
+    };
+
+    const el = checkElement();
+    if (el) return resolve(el);
+
+    const observer = new MutationObserver(() => {
+      const el = checkElement();
+      if (el) {
+        observer.disconnect();
+        resolve(el);
+      }
+    });
+
+    observer.observe(document.body, { childList: true, subtree: true });
+
+    setTimeout(() => {
+      observer.disconnect();
+      reject(new Error(`Element with role="${role}" and name="${name}" not found after ${timeout}ms`));
+    }, timeout);
+  });
+}
+
 function triggerAngularInput(element, value) {
   // Clear existing value
   element.value = '';
@@ -153,8 +226,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 });
 
-async function runQuote({ capCode, term, mileage, contractType, companyName = 'Quote Test Ltd' }) {
-  console.log('[Drivalia] Starting quote automation:', { capCode, term, mileage, contractType });
+async function runQuote({ capCode, term, mileage, contractType, companyName = 'Quote Test Ltd', upfrontPayments = 3 }) {
+  console.log('[Drivalia] Starting quote automation:', { capCode, term, mileage, contractType, upfrontPayments });
 
   try {
     // Ensure we're on the new quote page
@@ -163,137 +236,121 @@ async function runQuote({ capCode, term, mileage, contractType, companyName = 'Q
       await sleep(2000);
     }
 
-    // Step 0: Wait for page to fully load and expand customer details accordion
+    // Step 0: Wait for page to fully load
     console.log('[Drivalia] Waiting for page to load...');
-    await sleep(1000);
+    await sleep(1500);
 
-    // Expand customer details section - click the accordion/panel header
-    console.log('[Drivalia] Expanding customer details section...');
-    const accordionSelectors = [
-      'mat-expansion-panel-header',
-      '.mat-expansion-panel-header',
-      '[class*="accordion"] [class*="header"]',
-      '.quoting-layout__header-title',
-      '[class*="expansion"] [class*="header"]',
-      'mat-panel-title',
-      '.customer-panel-header',
-      '[aria-label*="Customer"]',
-      'button[aria-expanded="false"]'
-    ];
-
-    for (const selector of accordionSelectors) {
-      const accordion = document.querySelector(selector);
-      if (accordion) {
-        console.log('[Drivalia] Found accordion element:', selector);
-        clickElement(accordion);
-        await sleep(500);
-        break;
-      }
-    }
-
-    // Also try clicking on any collapsed panel text that contains "Customer"
-    const panelHeaders = document.querySelectorAll('mat-expansion-panel-header, .mat-expansion-panel-header, [class*="panel-header"]');
-    for (const header of panelHeaders) {
-      if (header.textContent?.toLowerCase().includes('customer')) {
-        console.log('[Drivalia] Clicking Customer panel header');
-        clickElement(header);
-        await sleep(500);
-        break;
-      }
-    }
-
-    await sleep(500);
-
-    // Step 1: Set Customer Type to Corporate (C)
+    // Step 1: Set Customer Type using data-hook selector (from Playwright recording)
+    // The select element has data-hook="quoting.customer.customertype"
     console.log('[Drivalia] Setting customer type...');
-    const customerTypeSelect = await waitForElement('[aria-label="Customer Type"], #\\34 33, select[ng-model*="customerType"], mat-select[formcontrolname*="customer"], select[name*="customer"]', 15000);
-    if (customerTypeSelect.tagName === 'SELECT') {
-      customerTypeSelect.value = 'string:C';
-      customerTypeSelect.dispatchEvent(new Event('change', { bubbles: true }));
-    } else {
-      // It's a mat-select, need to click and select option
-      clickElement(customerTypeSelect);
-      await sleep(300);
-      const corpOption = await waitForElementByText('Corporate', 'mat-option');
-      clickElement(corpOption);
-    }
+    const customerTypeSelect = await waitForElement('select[data-hook="quoting.customer.customertype"]', 15000);
+
+    // Determine customer type based on contract type
+    // PCH = Personal, BCH/CH = Company
+    const customerTypeValue = contractType === 'PCH' ? 'string:I' : 'string:C';
+    customerTypeSelect.value = customerTypeValue;
+    customerTypeSelect.dispatchEvent(new Event('change', { bubbles: true }));
     await sleep(500);
 
-    // Step 2: Enter company name
+    // Step 2: Click "Customer" link to expand section (from Playwright: getByRole('link', { name: 'Customer' }))
+    console.log('[Drivalia] Expanding Customer section...');
+    const customerLink = await findByRole('link', 'Customer');
+    clickElement(customerLink);
+    await sleep(500);
+
+    // Step 3: Enter company name (from Playwright: getByRole('textbox', { name: 'Company Name*' }))
     console.log('[Drivalia] Entering company name...');
-    const companyInput = await waitForElement('[aria-label="Company Name"], #\\35 60, input[placeholder*="Company"], input[formcontrolname*="company"], input[name*="company"]');
+    const companyInput = await findByRole('textbox', 'Company Name');
     triggerAngularInput(companyInput, companyName);
     await sleep(300);
 
-    // Step 3: Click "Choose a Vehicle" button
+    // Collapse Customer section by clicking link again
+    clickElement(customerLink);
+    await sleep(300);
+
+    // Step 4: Click "Choose a Vehicle" button (from Playwright: getByRole('button', { name: 'Choose a Vehicle' }))
     console.log('[Drivalia] Opening vehicle search...');
-    const chooseVehicleBtn = await waitForElementByText('Choose a Vehicle', 'button');
+    const chooseVehicleBtn = await findByRole('button', 'Choose a Vehicle');
     clickElement(chooseVehicleBtn);
     await sleep(1000);
 
-    // Step 4: Search for vehicle by CAP code
+    // Step 5: Search for vehicle by CAP code (from Playwright: getByRole('textbox', { name: 'Search a Vehicle' }))
     console.log('[Drivalia] Searching for CAP code:', capCode);
-    const vehicleSearchInput = await waitForElement('[aria-label="Search a Vehicle"], input[placeholder*="Search"]');
+    const vehicleSearchInput = await findByRole('textbox', 'Search a Vehicle');
     triggerAngularInput(vehicleSearchInput, capCode);
-    await sleep(1500); // Wait for search results
+    await sleep(2000); // Wait for search results
 
-    // Step 5: Click on the first search result
+    // Step 6: Click on the first search result (from Playwright: .mat-list-item-content)
     console.log('[Drivalia] Selecting vehicle from results...');
-    const searchResult = await waitForElement('mat-nav-list mat-list-item, .mat-list-item');
+    const searchResult = await waitForElement('.mat-list-item-content', 5000);
     clickElement(searchResult);
     await sleep(500);
 
-    // Step 6: Click "Use this vehicle" button
+    // Step 7: Click "Use this vehicle" button (from Playwright: getByRole('button', { name: 'Use this vehicle' }))
     console.log('[Drivalia] Confirming vehicle selection...');
-    const useVehicleBtn = await waitForElementByText('Use this vehicle', 'button');
+    const useVehicleBtn = await findByRole('button', 'Use this vehicle');
     clickElement(useVehicleBtn);
     await sleep(1000);
 
-    // Step 7: Click "Select a Product" button
+    // Step 8: Click "Select a Product" button (from Playwright: getByRole('button', { name: 'Select a Product' }))
     console.log('[Drivalia] Opening product selection...');
-    const selectProductBtn = await waitForElementByText('Select a Product', 'button');
+    const selectProductBtn = await findByRole('button', 'Select a Product');
     clickElement(selectProductBtn);
     await sleep(1000);
 
-    // Step 8: Select the appropriate product based on contract type
+    // Step 9: Select the appropriate product based on contract type
+    // From Playwright: getByText('DRIVALIA - ALL BRANDS DISCOUNT BROKER BCH Q4')
     console.log('[Drivalia] Selecting product for contract type:', contractType);
-    const productPattern = PRODUCT_PATTERNS[contractType] || 'BROKER BCH';
-    const productOption = await waitForElementByText(productPattern, 'mat-list-option, .mat-list-option');
+    const productPattern = PRODUCT_PATTERNS[contractType] || 'DRIVALIA - ALL BRANDS DISCOUNT BROKER BCH';
+    const productOption = await waitForElementByText(productPattern, 'mat-list-option, .mat-list-option, p');
     clickElement(productOption);
     await sleep(500);
 
-    // Step 9: Click "Use this Product" button
-    const useProductBtn = await waitForElementByText('Use this Product', 'button');
+    // Step 10: Click "Use this Product" button (from Playwright: getByRole('button', { name: 'Use this Product' }))
+    const useProductBtn = await findByRole('button', 'Use this Product');
     clickElement(useProductBtn);
     await sleep(1000);
 
-    // Step 10: Enter term
+    // Step 11: Click "Finance" link to expand finance section (from Playwright: getByRole('link', { name: 'Finance' }))
+    console.log('[Drivalia] Expanding Finance section...');
+    const financeLink = await findByRole('link', 'Finance');
+    clickElement(financeLink);
+    await sleep(500);
+
+    // Step 12: Set "No. in Advance (financier)" spinbutton
+    // From Playwright: getByRole('spinbutton', { name: 'No. in Advance (financier)' })
+    console.log('[Drivalia] Setting upfront payments:', upfrontPayments);
+    const advanceInput = await findByRole('spinbutton', 'No. in Advance');
+    triggerAngularInput(advanceInput, upfrontPayments.toString());
+    await sleep(300);
+
+    // Step 13: Enter term (from Playwright: getByRole('spinbutton', { name: 'Term' }))
     console.log('[Drivalia] Entering term:', term);
-    const termInput = await waitForElement('[aria-label*="Term"], input[id*="calcfield"][aria-label*="Term"]');
+    const termInput = await findByRole('spinbutton', 'Term');
     triggerAngularInput(termInput, term.toString());
     await sleep(300);
 
-    // Step 11: Enter annual mileage (in thousands for Drivalia)
+    // Step 14: Enter annual mileage in thousands (from Playwright: getByRole('textbox', { name: 'Annual Mileage (x1000)' }))
     console.log('[Drivalia] Entering mileage:', mileage);
     const mileageInThousands = Math.round(mileage / 1000);
-    const mileageInput = await waitForElement('[aria-label*="Annual Mileage"], input[id*="calcfield"][aria-label*="Mileage"]');
+    const mileageInput = await findByRole('textbox', 'Annual Mileage');
     triggerAngularInput(mileageInput, mileageInThousands.toString());
     await sleep(300);
 
-    // Step 12: Click Recalculate
+    // Step 15: Click Recalculate (from Playwright: getByRole('button', { name: 'Recalculate' }))
     console.log('[Drivalia] Clicking Recalculate...');
-    const recalculateBtn = await waitForElementByText('Recalculate', 'button');
+    const recalculateBtn = await findByRole('button', 'Recalculate');
     clickElement(recalculateBtn);
-    await sleep(2000); // Wait for calculation
+    await sleep(3000); // Wait for calculation
 
-    // Step 13: Click Save Quote
+    // Step 16: Click Save Quote (from Playwright: getByRole('button', { name: ' Save Quote' }) - note space)
     console.log('[Drivalia] Saving quote...');
     lastQuoteResponse = null; // Clear previous response
     const saveQuoteBtn = await waitForElementByText('Save Quote', 'button');
     clickElement(saveQuoteBtn);
     await sleep(3000); // Wait for save and response
 
-    // Step 14: Extract results
+    // Step 17: Extract results
     const result = await extractQuoteResult();
     console.log('[Drivalia] Quote completed:', result);
 
@@ -322,36 +379,55 @@ async function extractQuoteResult() {
 
   if (lastQuoteResponse) {
     console.log('[Drivalia] Extracting from API response');
+    console.log('[Drivalia] Response keys:', Object.keys(lastQuoteResponse));
 
     try {
-      // Extract from the response structure
+      // The Drivalia /calculate response structure:
+      // - summary.assetLines[0].p11d - P11D value
+      // - summary.assetLines[0].schedule[0] - Initial payment (headline: false)
+      // - summary.assetLines[0].schedule[1] - Monthly payment (headline: true)
+      // - assets[0].applicationId - Quote ID (only set after save)
+
+      const summary = lastQuoteResponse.summary || {};
+      const assetLines = summary.assetLines || [];
+      const assetLine = assetLines[0] || {};
+      const schedule = assetLine.schedule || [];
+
+      // Get P11D from asset line
+      const p11d = assetLine.p11d || null;
+
+      // Get initial payment (first in schedule, headline: false)
+      const initialPayment = schedule[0] || {};
+      const initialRentalExVat = initialPayment.netValue || null;
+      const initialRentalIncVat = initialPayment.value || null;
+
+      // Get monthly payment (second in schedule, headline: true)
+      const monthlyPayment = schedule[1] || {};
+      const monthlyRentalExVat = monthlyPayment.netValue || null;
+      const monthlyRentalIncVat = monthlyPayment.value || null;
+
+      // Get quote number from assets or URL
       const assets = lastQuoteResponse.assets || [];
-      const asset = assets[0]?.asset || {};
-      const finance = lastQuoteResponse.finance || {};
-      const cashFlow = finance.cashFlow || {};
-      const lines = cashFlow.lines || [];
+      let quoteNumber = assets[0]?.applicationId?.toString() || null;
 
-      // Get CAP code
-      const catalogXrefCode = asset.catalogXref?.catalogXrefCode ||
-                             asset.data?.items?.[0]?.catalogXrefCode ||
-                             null;
-
-      // Get pricing from cashflow
-      const initialPayment = lines[0]?.totalPayment || null;
-      const monthlyPayment = lines[1]?.totalPayment || lines[1]?.instalment || null;
-      const monthlyRentalExVat = lines[1]?.instalment || null;
-
-      // Get quote number from URL or response
-      const quoteNumber = lastQuoteResponse.applicationId?.toString() || null;
+      // If no applicationId, try to get from current URL after save
+      if (!quoteNumber && window.location.hash.includes('/quoting/')) {
+        const match = window.location.hash.match(/\/quoting\/(\d+)/);
+        if (match) {
+          quoteNumber = match[1];
+        }
+      }
 
       const result = {
         quoteId: quoteNumber,
-        capCode: catalogXrefCode,
         monthlyRental: monthlyRentalExVat,
-        monthlyRentalIncVat: monthlyPayment,
-        initialRental: initialPayment,
-        p11d: asset.catalogValue || asset.data?.items?.[0]?.catalogValue || null
+        monthlyRentalIncVat: monthlyRentalIncVat,
+        initialRental: initialRentalExVat,
+        initialRentalIncVat: initialRentalIncVat,
+        p11d: p11d
       };
+
+      console.log('[Drivalia] Extracted result:', result);
 
       // Clear stored response
       lastQuoteResponse = null;
@@ -363,6 +439,15 @@ async function extractQuoteResult() {
   }
 
   console.warn('[Drivalia] No API response intercepted, attempting DOM extraction...');
+
+  // Fallback: Try to get quote ID from URL
+  let quoteId = null;
+  if (window.location.hash.includes('/quoting/')) {
+    const match = window.location.hash.match(/\/quoting\/(\d+)/);
+    if (match) {
+      quoteId = match[1];
+    }
+  }
 
   // Fallback to DOM extraction
   const pageText = document.body.innerText;
@@ -376,7 +461,7 @@ async function extractQuoteResult() {
   }
 
   return {
-    quoteId: null,
+    quoteId,
     monthlyRental,
     initialRental: null
   };
