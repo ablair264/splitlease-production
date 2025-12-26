@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import {
   Loader2,
   CheckCircle2,
@@ -13,6 +13,9 @@ import {
   Calculator,
   Settings2,
   X,
+  XCircle,
+  Clock,
+  RefreshCw,
 } from "lucide-react";
 
 type Vehicle = {
@@ -27,6 +30,26 @@ type Vehicle = {
   bodyStyle: string;
   co2: number;
   p11d: number;
+};
+
+type QueueItem = {
+  vehicleId: string;
+  capCode: string;
+  manufacturer: string;
+  model: string;
+  variant: string;
+  term: number;
+  mileage: number;
+  contractType: string;
+  status: "pending" | "running" | "complete" | "error";
+  result?: {
+    quoteId?: string;
+    monthlyRental?: number;
+    initialRental?: number;
+  };
+  error?: string;
+  batchId?: string;
+  createdAt?: string;
 };
 
 type QuoteConfig = {
@@ -138,7 +161,11 @@ export function DrivaliaQuoteRunner({ onQuotesComplete }: { onQuotesComplete?: (
   // Selected vehicles (not queued yet)
   const [selectedVehicles, setSelectedVehicles] = useState<Vehicle[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [queueSent, setQueueSent] = useState(false);
+
+  // Current queue state (live updates from API)
+  const [currentQueue, setCurrentQueue] = useState<QueueItem[]>([]);
+  const [currentBatchId, setCurrentBatchId] = useState<string | null>(null);
+  const [isPolling, setIsPolling] = useState(false);
 
   // Calculate total quotes
   const totalQuotes = useMemo(() => {
@@ -215,10 +242,16 @@ export function DrivaliaQuoteRunner({ onQuotesComplete }: { onQuotesComplete?: (
     setSelectedVehicles(selectedVehicles.filter((v) => v.id !== vehicleId));
   };
 
-  // Clear all
+  // Clear all selected vehicles
   const clearAll = () => {
     setSelectedVehicles([]);
-    setQueueSent(false);
+  };
+
+  // Clear the queue and reset
+  const clearQueue = () => {
+    setCurrentQueue([]);
+    setCurrentBatchId(null);
+    setIsPolling(false);
   };
 
   // Open Drivalia portal
@@ -228,6 +261,44 @@ export function DrivaliaQuoteRunner({ onQuotesComplete }: { onQuotesComplete?: (
       "_blank"
     );
   };
+
+  // Fetch current queue status from API
+  const fetchQueueStatus = useCallback(async () => {
+    try {
+      const response = await fetch(`/api/drivalia/quote-queue?_t=${Date.now()}`);
+      const data = await response.json();
+      if (data.queue) {
+        // Filter to only show items from current batch if we have one
+        const items = currentBatchId
+          ? data.queue.filter((q: QueueItem) => q.batchId === currentBatchId)
+          : data.queue;
+        setCurrentQueue(items);
+
+        // Check if all items are complete or errored
+        const pendingOrRunning = items.filter(
+          (q: QueueItem) => q.status === "pending" || q.status === "running"
+        );
+        if (items.length > 0 && pendingOrRunning.length === 0) {
+          setIsPolling(false);
+          onQuotesComplete?.();
+        }
+      }
+    } catch (error) {
+      console.error("Failed to fetch queue status:", error);
+    }
+  }, [currentBatchId, onQuotesComplete]);
+
+  // Poll for queue updates when we have an active batch
+  useEffect(() => {
+    if (!isPolling || !currentBatchId) return;
+
+    // Initial fetch
+    fetchQueueStatus();
+
+    // Poll every 2 seconds
+    const interval = setInterval(fetchQueueStatus, 2000);
+    return () => clearInterval(interval);
+  }, [isPolling, currentBatchId, fetchQueueStatus]);
 
   // Generate all quote combinations and send to API
   const sendQueueToApi = async () => {
@@ -278,9 +349,12 @@ export function DrivaliaQuoteRunner({ onQuotesComplete }: { onQuotesComplete?: (
       });
 
       if (response.ok) {
-        setQueueSent(true);
+        const data = await response.json();
+        setCurrentBatchId(data.batchId);
         setSelectedVehicles([]);
-        onQuotesComplete?.();
+        setIsPolling(true);
+        // Immediately fetch the queue to show items
+        await fetchQueueStatus();
       } else {
         const data = await response.json();
         alert(data.error || "Failed to send queue");
@@ -293,41 +367,45 @@ export function DrivaliaQuoteRunner({ onQuotesComplete }: { onQuotesComplete?: (
     }
   };
 
-  // Show success message if queue was sent
-  if (queueSent) {
-    return (
-      <div className="space-y-6">
-        <div className="p-6 rounded-xl border bg-green-500/10 border-green-500/30">
-          <div className="flex items-start gap-4">
-            <CheckCircle2 className="h-6 w-6 text-green-500 mt-0.5" />
-            <div className="flex-1">
-              <h3 className="text-lg font-semibold text-green-400 mb-2">
-                Queue Sent Successfully!
-              </h3>
-              <p className="text-sm text-white/60 mb-4">
-                Open the browser extension sidepanel and click the Drivalia tab to process the queue.
-                Make sure the Drivalia portal is open and you&apos;re logged in.
-              </p>
-              <div className="flex gap-3">
-                <button
-                  onClick={openPortal}
-                  className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-pink-500/20 text-pink-400 hover:bg-pink-500/30 transition-colors"
-                >
-                  Open Drivalia Portal <ExternalLink className="h-4 w-4" />
-                </button>
-                <button
-                  onClick={() => setQueueSent(false)}
-                  className="px-4 py-2 rounded-lg bg-white/10 text-white hover:bg-white/20 transition-colors"
-                >
-                  Queue More Vehicles
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  // Helper functions for queue display
+  const getStatusIcon = (status: string) => {
+    switch (status) {
+      case "complete":
+        return <CheckCircle2 className="h-4 w-4 text-green-400" />;
+      case "error":
+        return <XCircle className="h-4 w-4 text-red-400" />;
+      case "running":
+        return <Loader2 className="h-4 w-4 text-pink-400 animate-spin" />;
+      default:
+        return <Clock className="h-4 w-4 text-yellow-400" />;
+    }
+  };
+
+  const formatCurrency = (value: number | null | undefined) => {
+    if (value === null || value === undefined) return "-";
+    return `£${value.toFixed(2)}`;
+  };
+
+  const getContractLabel = (type: string) => {
+    const labels: Record<string, string> = {
+      BCH: "BCH",
+      BCHNM: "BCH (NM)",
+      PCH: "PCH",
+      PCHNM: "PCH (NM)",
+    };
+    return labels[type] || type;
+  };
+
+  // Queue stats
+  const queueStats = useMemo(() => {
+    return {
+      total: currentQueue.length,
+      pending: currentQueue.filter(q => q.status === "pending").length,
+      running: currentQueue.filter(q => q.status === "running").length,
+      complete: currentQueue.filter(q => q.status === "complete").length,
+      error: currentQueue.filter(q => q.status === "error").length,
+    };
+  }, [currentQueue]);
 
   return (
     <div className="space-y-6">
@@ -666,6 +744,146 @@ export function DrivaliaQuoteRunner({ onQuotesComplete }: { onQuotesComplete?: (
           </div>
         </div>
       </div>
+
+      {/* Live Queue Status */}
+      {currentQueue.length > 0 && (
+        <div
+          className="rounded-xl border p-5"
+          style={{ background: "rgba(26, 31, 42, 0.6)", borderColor: "rgba(255, 255, 255, 0.1)" }}
+        >
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-white font-medium flex items-center gap-2">
+              <Car className="h-4 w-4 text-pink-400" />
+              Quote Queue
+              {isPolling && (
+                <RefreshCw className="h-3.5 w-3.5 text-pink-400 animate-spin ml-2" />
+              )}
+            </h3>
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-3 text-xs">
+                {queueStats.pending > 0 && (
+                  <span className="flex items-center gap-1 text-yellow-400">
+                    <Clock className="h-3 w-3" />
+                    {queueStats.pending} pending
+                  </span>
+                )}
+                {queueStats.running > 0 && (
+                  <span className="flex items-center gap-1 text-pink-400">
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                    {queueStats.running} running
+                  </span>
+                )}
+                {queueStats.complete > 0 && (
+                  <span className="flex items-center gap-1 text-green-400">
+                    <CheckCircle2 className="h-3 w-3" />
+                    {queueStats.complete} done
+                  </span>
+                )}
+                {queueStats.error > 0 && (
+                  <span className="flex items-center gap-1 text-red-400">
+                    <XCircle className="h-3 w-3" />
+                    {queueStats.error} failed
+                  </span>
+                )}
+              </div>
+              <button
+                onClick={clearQueue}
+                className="text-xs text-white/40 hover:text-white/60 flex items-center gap-1"
+              >
+                <X className="h-3 w-3" />
+                Clear
+              </button>
+            </div>
+          </div>
+
+          {/* Progress bar */}
+          {(queueStats.pending > 0 || queueStats.running > 0) && (
+            <div className="h-1.5 bg-white/10 rounded-full mb-4 overflow-hidden">
+              <div
+                className="h-full bg-gradient-to-r from-pink-500 to-pink-400 transition-all duration-500"
+                style={{
+                  width: `${((queueStats.complete + queueStats.error) / queueStats.total) * 100}%`,
+                }}
+              />
+            </div>
+          )}
+
+          {/* Queue table */}
+          <div className="max-h-[300px] overflow-y-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr style={{ borderBottom: "1px solid rgba(255, 255, 255, 0.1)" }}>
+                  <th className="text-left p-2 text-white/60 font-medium">Vehicle</th>
+                  <th className="text-center p-2 text-white/60 font-medium">Term</th>
+                  <th className="text-center p-2 text-white/60 font-medium">Mileage</th>
+                  <th className="text-center p-2 text-white/60 font-medium">Contract</th>
+                  <th className="text-right p-2 text-white/60 font-medium">Monthly</th>
+                  <th className="text-center p-2 text-white/60 font-medium">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {currentQueue.map((item, idx) => (
+                  <tr
+                    key={`${item.capCode}-${item.term}-${item.mileage}-${item.contractType}-${idx}`}
+                    className="transition-colors hover:bg-white/5"
+                    style={{ borderBottom: "1px solid rgba(255, 255, 255, 0.05)" }}
+                  >
+                    <td className="p-2">
+                      <div className="text-white text-xs font-medium">
+                        {item.manufacturer} {item.model}
+                      </div>
+                      <div className="text-white/40 text-xs font-mono">
+                        {item.capCode}
+                      </div>
+                    </td>
+                    <td className="text-center p-2 text-white/80 text-xs">{item.term}m</td>
+                    <td className="text-center p-2 text-white/80 text-xs">
+                      {(item.mileage / 1000).toFixed(0)}k
+                    </td>
+                    <td className="text-center p-2">
+                      <span className="px-2 py-0.5 rounded text-xs bg-pink-500/20 text-pink-300">
+                        {getContractLabel(item.contractType)}
+                      </span>
+                    </td>
+                    <td className="text-right p-2">
+                      <span className={item.result?.monthlyRental ? "text-pink-400 font-medium" : "text-white/40"}>
+                        {formatCurrency(item.result?.monthlyRental)}
+                      </span>
+                    </td>
+                    <td className="text-center p-2">
+                      <div className="flex items-center justify-center gap-1">
+                        {getStatusIcon(item.status)}
+                        {item.error && (
+                          <span className="text-xs text-red-400/70 truncate max-w-[80px]" title={item.error}>
+                            {item.error}
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Open Portal Button when queue has pending items */}
+          {queueStats.pending > 0 && (
+            <div className="mt-4 p-4 bg-pink-500/10 border border-pink-500/20 rounded-xl">
+              <div className="flex items-center justify-between">
+                <p className="text-sm text-pink-300">
+                  <strong>{queueStats.pending} quotes pending.</strong> Open the browser extension sidepanel on the Drivalia portal to process.
+                </p>
+                <button
+                  onClick={openPortal}
+                  className="px-3 py-1.5 rounded-lg bg-pink-500/20 text-pink-400 text-sm hover:bg-pink-500/30 transition-colors flex items-center gap-1"
+                >
+                  Open Portal <ExternalLink className="h-3 w-3" />
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
