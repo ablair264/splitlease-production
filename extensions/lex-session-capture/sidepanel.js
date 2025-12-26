@@ -1,101 +1,155 @@
 document.addEventListener('DOMContentLoaded', async () => {
-  const statusEl = document.getElementById('status');
-  const captureBtn = document.getElementById('captureBtn');
-  const testLoadBtn = document.getElementById('testLoadBtn');
-  const testBtn = document.getElementById('testBtn');
-  const resultDiv = document.getElementById('result');
-  const resultValue = document.getElementById('resultValue');
-  const queueSection = document.getElementById('queueSection');
-  const queueList = document.getElementById('queueList');
-  const queueCount = document.getElementById('queueCount');
-  const processQueueBtn = document.getElementById('processQueueBtn');
-  const progressContainer = document.getElementById('progressContainer');
-  const progressFill = document.getElementById('progressFill');
-
   const API_URL = 'https://splitlease.netlify.app';
 
-  let isPageReady = false;
-  let selectedFlagged = new Set(); // Track selected flagged items for rerun
+  // Provider tabs
+  const providerTabs = document.querySelectorAll('.provider-tab');
+  const lexSection = document.getElementById('lexSection');
+  const drivaliaSection = document.getElementById('drivaliaSection');
+  const lexStatusDot = document.getElementById('lexStatusDot');
+  const drivaliaStatusDot = document.getElementById('drivaliaStatusDot');
+
+  // Lex elements
+  const lexStatusEl = document.getElementById('lexStatus');
+  const lexCaptureBtn = document.getElementById('lexCaptureBtn');
+  const testLoadBtn = document.getElementById('testLoadBtn');
+  const testBtn = document.getElementById('testBtn');
+  const lexResultDiv = document.getElementById('lexResult');
+  const lexResultValue = document.getElementById('lexResultValue');
+  const lexQueueSection = document.getElementById('lexQueueSection');
+  const lexQueueList = document.getElementById('lexQueueList');
+  const lexQueueCount = document.getElementById('lexQueueCount');
+  const lexProcessQueueBtn = document.getElementById('lexProcessQueueBtn');
+  const lexProgressContainer = document.getElementById('lexProgressContainer');
+  const lexProgressFill = document.getElementById('lexProgressFill');
+
+  // Drivalia elements
+  const drivaliaStatusEl = document.getElementById('drivaliaStatus');
+  const drivaliaCaptureBtn = document.getElementById('drivaliaCaptureBtn');
+  const drivaliaResultDiv = document.getElementById('drivaliaResult');
+  const drivaliaResultValue = document.getElementById('drivaliaResultValue');
+  const drivaliaQueueSection = document.getElementById('drivaliaQueueSection');
+  const drivaliaQueueList = document.getElementById('drivaliaQueueList');
+  const drivaliaQueueCount = document.getElementById('drivaliaQueueCount');
+  const drivaliaProcessQueueBtn = document.getElementById('drivaliaProcessQueueBtn');
+  const drivaliaProgressContainer = document.getElementById('drivaliaProgressContainer');
+  const drivaliaProgressFill = document.getElementById('drivaliaProgressFill');
+
+  let currentProvider = 'lex';
+  let isLexReady = false;
+  let isDrivaliaReady = false;
+  let selectedFlagged = new Set();
+
+  // Tab switching
+  providerTabs.forEach(tab => {
+    tab.addEventListener('click', () => {
+      const provider = tab.dataset.provider;
+      currentProvider = provider;
+
+      providerTabs.forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+
+      lexSection.classList.toggle('active', provider === 'lex');
+      drivaliaSection.classList.toggle('active', provider === 'drivalia');
+    });
+  });
 
   // Initial check
-  await checkPageStatus();
-  await checkQueue();
+  await checkAllProviders();
+  await checkLexQueue();
+  await checkDrivaliaQueue();
 
-  // Periodically check page status and queue
+  // Periodically check
   setInterval(async () => {
-    await checkPageStatus();
-    await checkQueue();
-  }, 2000);
+    await checkAllProviders();
+    await checkLexQueue();
+    await checkDrivaliaQueue();
+  }, 3000);
 
-  async function checkPageStatus() {
+  // Check both providers status
+  async function checkAllProviders() {
+    await checkLexPageStatus();
+    await checkDrivaliaPageStatus();
+  }
+
+  // ==================== LEX ====================
+
+  async function checkLexPageStatus() {
     try {
-      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      const tabs = await chrome.tabs.query({ url: 'https://associate.lexautolease.co.uk/*' });
 
-      if (!tab.url?.includes('associate.lexautolease.co.uk')) {
-        statusEl.className = 'status warning';
-        statusEl.textContent = 'Navigate to associate.lexautolease.co.uk';
-        captureBtn.textContent = 'Open Lex Portal';
-        captureBtn.disabled = false;
-        captureBtn.onclick = () => {
+      if (tabs.length === 0) {
+        lexStatusEl.className = 'status warning';
+        lexStatusEl.textContent = 'No Lex portal tab open';
+        lexCaptureBtn.textContent = 'Open Lex Portal';
+        lexCaptureBtn.disabled = false;
+        lexCaptureBtn.onclick = () => {
           chrome.tabs.create({ url: 'https://associate.lexautolease.co.uk/QuickQuote.aspx' });
         };
-        isPageReady = false;
+        isLexReady = false;
+        lexStatusDot.classList.remove('ready');
         testBtn.style.display = 'none';
+        testLoadBtn.style.display = 'none';
         return;
       }
 
       // Check if quote form is ready
-      const response = await chrome.tabs.sendMessage(tab.id, { action: 'checkPageReady' });
+      try {
+        const response = await chrome.tabs.sendMessage(tabs[0].id, { action: 'checkPageReady' });
 
-      if (response?.ready) {
-        statusEl.className = 'status success';
-        statusEl.textContent = 'Quote page ready - automation enabled';
-        captureBtn.textContent = 'Page Ready ✓';
-        captureBtn.disabled = true;
-        isPageReady = true;
-        testLoadBtn.style.display = 'block';
-        testBtn.style.display = 'block';
-      } else {
-        statusEl.className = 'status info';
-        statusEl.textContent = 'Navigate to the Quote page';
-        captureBtn.textContent = 'Go to Quote Page';
-        captureBtn.disabled = false;
-        captureBtn.onclick = () => {
-          chrome.tabs.update(tab.id, { url: 'https://associate.lexautolease.co.uk/QuickQuote.aspx' });
+        if (response?.ready) {
+          lexStatusEl.className = 'status success';
+          lexStatusEl.textContent = 'Quote page ready - automation enabled';
+          lexCaptureBtn.textContent = 'Page Ready ✓';
+          lexCaptureBtn.disabled = true;
+          isLexReady = true;
+          lexStatusDot.classList.add('ready');
+          testLoadBtn.style.display = 'block';
+          testBtn.style.display = 'block';
+        } else {
+          lexStatusEl.className = 'status info';
+          lexStatusEl.textContent = 'Navigate to the Quote page';
+          lexCaptureBtn.textContent = 'Go to Quote Page';
+          lexCaptureBtn.disabled = false;
+          lexCaptureBtn.onclick = () => {
+            chrome.tabs.update(tabs[0].id, { url: 'https://associate.lexautolease.co.uk/QuickQuote.aspx' });
+          };
+          isLexReady = false;
+          lexStatusDot.classList.remove('ready');
+          testLoadBtn.style.display = 'none';
+          testBtn.style.display = 'none';
+        }
+      } catch (e) {
+        lexStatusEl.className = 'status info';
+        lexStatusEl.textContent = 'Refresh the Lex page';
+        lexCaptureBtn.textContent = 'Refresh Page';
+        lexCaptureBtn.disabled = false;
+        lexCaptureBtn.onclick = () => {
+          chrome.tabs.reload(tabs[0].id);
         };
-        isPageReady = false;
+        isLexReady = false;
+        lexStatusDot.classList.remove('ready');
         testLoadBtn.style.display = 'none';
         testBtn.style.display = 'none';
       }
     } catch (e) {
-      statusEl.className = 'status info';
-      statusEl.textContent = 'Refresh the Lex page';
-      captureBtn.textContent = 'Refresh Page';
-      captureBtn.disabled = false;
-      captureBtn.onclick = async () => {
-        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-        chrome.tabs.reload(tab.id);
-      };
-      isPageReady = false;
-      testLoadBtn.style.display = 'none';
-      testBtn.style.display = 'none';
+      console.error('Lex status check failed:', e);
     }
   }
 
-  // Handle test load (just make/model/variant, no quote)
+  // Handle test load
   testLoadBtn.addEventListener('click', async () => {
     testLoadBtn.disabled = true;
     testLoadBtn.textContent = 'Loading...';
-    statusEl.className = 'status info';
-    statusEl.textContent = 'Loading vehicle in form...';
+    lexStatusEl.className = 'status info';
+    lexStatusEl.textContent = 'Loading vehicle in form...';
 
     try {
       const response = await chrome.runtime.sendMessage({
         action: 'testLoadVehicle',
         data: {
-          makeId: '18',      // BMW
-          modelId: '6',      // 3 Series
-          variantId: '391'   // Variant
+          makeId: '18',
+          modelId: '6',
+          variantId: '391'
         }
       });
 
@@ -104,12 +158,12 @@ document.addEventListener('DOMContentLoaded', async () => {
       }
 
       if (response.success) {
-        statusEl.className = 'status success';
-        statusEl.textContent = `Loaded: ${response.make} ${response.model} - ${response.variant}`;
+        lexStatusEl.className = 'status success';
+        lexStatusEl.textContent = `Loaded: ${response.make} ${response.model} - ${response.variant}`;
       }
     } catch (error) {
-      statusEl.className = 'status error';
-      statusEl.textContent = `Load failed: ${error.message}`;
+      lexStatusEl.className = 'status error';
+      lexStatusEl.textContent = `Load failed: ${error.message}`;
     }
 
     testLoadBtn.disabled = false;
@@ -120,17 +174,17 @@ document.addEventListener('DOMContentLoaded', async () => {
   testBtn.addEventListener('click', async () => {
     testBtn.disabled = true;
     testBtn.textContent = 'Running...';
-    resultDiv.style.display = 'none';
-    statusEl.className = 'status info';
-    statusEl.textContent = 'Automating quote form...';
+    lexResultDiv.style.display = 'none';
+    lexStatusEl.className = 'status info';
+    lexStatusEl.textContent = 'Automating quote form...';
 
     try {
       const response = await chrome.runtime.sendMessage({
         action: 'runQuote',
         data: {
-          makeId: '18',      // BMW
-          modelId: '6',      // 3 Series
-          variantId: '391',  // Variant
+          makeId: '18',
+          modelId: '6',
+          variantId: '391',
           term: 36,
           mileage: 10000,
           paymentPlan: 'spread_3_down',
@@ -144,29 +198,29 @@ document.addEventListener('DOMContentLoaded', async () => {
       }
 
       if (response.success) {
-        resultDiv.style.display = 'block';
-        resultValue.textContent = response.monthlyRental
+        lexResultDiv.style.display = 'block';
+        lexResultValue.textContent = response.monthlyRental
           ? `£${response.monthlyRental.toFixed(2)}/mo`
           : `Quote #${response.quoteId || 'Complete'}`;
-        statusEl.className = 'status success';
-        statusEl.textContent = 'Test quote completed!';
+        lexStatusEl.className = 'status success';
+        lexStatusEl.textContent = 'Test quote completed!';
       }
     } catch (error) {
-      statusEl.className = 'status error';
-      statusEl.textContent = `Quote failed: ${error.message}`;
+      lexStatusEl.className = 'status error';
+      lexStatusEl.textContent = `Quote failed: ${error.message}`;
     }
 
     testBtn.disabled = false;
-    testBtn.textContent = 'Test Quote (Abarth 500e)';
+    testBtn.textContent = 'Test Full Quote (BMW 3 Series)';
   });
 
-  // Process queue button
-  processQueueBtn.addEventListener('click', async () => {
-    processQueueBtn.disabled = true;
-    processQueueBtn.textContent = 'Processing...';
-    statusEl.className = 'status info';
-    statusEl.textContent = 'Processing queue - watch the page...';
-    progressContainer.style.display = 'block';
+  // Process Lex queue
+  lexProcessQueueBtn.addEventListener('click', async () => {
+    lexProcessQueueBtn.disabled = true;
+    lexProcessQueueBtn.textContent = 'Processing...';
+    lexStatusEl.className = 'status info';
+    lexStatusEl.textContent = 'Processing queue - watch the page...';
+    lexProgressContainer.style.display = 'block';
 
     try {
       const response = await chrome.runtime.sendMessage({
@@ -177,35 +231,31 @@ document.addEventListener('DOMContentLoaded', async () => {
         throw new Error(response.error);
       }
 
-      statusEl.className = 'status success';
-      statusEl.textContent = `Done! ${response.processed} quotes processed, ${response.errors} errors`;
-      progressFill.style.width = '100%';
+      lexStatusEl.className = 'status success';
+      lexStatusEl.textContent = `Done! ${response.processed} quotes processed, ${response.errors} errors`;
+      lexProgressFill.style.width = '100%';
 
-      // Refresh queue display
-      await checkQueue();
+      await checkLexQueue();
     } catch (error) {
-      statusEl.className = 'status error';
-      statusEl.textContent = `Failed: ${error.message}`;
+      lexStatusEl.className = 'status error';
+      lexStatusEl.textContent = `Failed: ${error.message}`;
     }
 
-    processQueueBtn.disabled = false;
-    processQueueBtn.textContent = 'Process Queue';
+    lexProcessQueueBtn.disabled = false;
+    lexProcessQueueBtn.textContent = 'Process Queue';
   });
 
-  // Check queue function
-  async function checkQueue() {
+  // Check Lex queue
+  async function checkLexQueue() {
     try {
-      // Add cache-busting timestamp
       const response = await fetch(`${API_URL}/api/lex-autolease/quote-queue?_t=${Date.now()}`, {
         cache: 'no-store',
-        headers: {
-          'Cache-Control': 'no-cache'
-        }
+        headers: { 'Cache-Control': 'no-cache' }
       });
       const data = await response.json();
 
       if (data.queue && data.queue.length > 0) {
-        queueSection.style.display = 'block';
+        lexQueueSection.style.display = 'block';
 
         const pending = data.queue.filter(q => q.status === 'pending').length;
         const complete = data.queue.filter(q => q.status === 'complete').length;
@@ -214,13 +264,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         const flagged = data.queue.filter(q => q.status === 'flagged').length;
         const total = data.queue.length;
 
-        // Update progress bar
         const processed = complete + errors + flagged;
         if (processed > 0 || running > 0) {
-          progressContainer.style.display = 'block';
-          progressFill.style.width = `${(processed / total) * 100}%`;
+          lexProgressContainer.style.display = 'block';
+          lexProgressFill.style.width = `${(processed / total) * 100}%`;
         } else {
-          progressContainer.style.display = 'none';
+          lexProgressContainer.style.display = 'none';
         }
 
         let countText = [];
@@ -229,10 +278,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (complete > 0) countText.push(`${complete} done`);
         if (flagged > 0) countText.push(`${flagged} flagged`);
         if (errors > 0) countText.push(`${errors} failed`);
-        queueCount.textContent = countText.join(' • ');
+        lexQueueCount.textContent = countText.join(' • ');
 
-        // Render queue items
-        queueList.innerHTML = data.queue.map(item => {
+        lexQueueList.innerHTML = data.queue.map(item => {
           const isFlagged = item.status === 'flagged' && item.fleetMarque?.hasLowerPrice;
           const isSelected = selectedFlagged.has(item.vehicleId);
 
@@ -263,8 +311,8 @@ document.addEventListener('DOMContentLoaded', async () => {
           `;
         }).join('');
 
-        // Add click handlers for checkboxes
-        queueList.querySelectorAll('.fm-checkbox').forEach(checkbox => {
+        // Add checkbox handlers
+        lexQueueList.querySelectorAll('.fm-checkbox').forEach(checkbox => {
           checkbox.addEventListener('change', (e) => {
             const vehicleId = e.target.dataset.id;
             if (e.target.checked) {
@@ -276,29 +324,27 @@ document.addEventListener('DOMContentLoaded', async () => {
           });
         });
 
-        // Show process button if ready
-        if (pending > 0 && isPageReady) {
-          processQueueBtn.style.display = 'block';
-          processQueueBtn.textContent = `Process ${pending} Quote${pending > 1 ? 's' : ''}`;
-          processQueueBtn.disabled = false;
+        if (pending > 0 && isLexReady) {
+          lexProcessQueueBtn.style.display = 'block';
+          lexProcessQueueBtn.textContent = `Process ${pending} Quote${pending > 1 ? 's' : ''}`;
+          lexProcessQueueBtn.disabled = false;
         } else if (pending > 0) {
-          processQueueBtn.style.display = 'block';
-          processQueueBtn.textContent = 'Go to Quote page first';
-          processQueueBtn.disabled = true;
+          lexProcessQueueBtn.style.display = 'block';
+          lexProcessQueueBtn.textContent = 'Go to Quote page first';
+          lexProcessQueueBtn.disabled = true;
         } else {
-          processQueueBtn.style.display = 'none';
+          lexProcessQueueBtn.style.display = 'none';
         }
 
         updateRerunButton();
       } else {
-        queueSection.style.display = 'none';
+        lexQueueSection.style.display = 'none';
       }
     } catch (error) {
-      console.error('Failed to check queue:', error);
+      console.error('Failed to check Lex queue:', error);
     }
   }
 
-  // Update rerun button visibility
   function updateRerunButton() {
     let rerunBtn = document.getElementById('rerunFmBtn');
     if (selectedFlagged.size > 0) {
@@ -308,7 +354,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         rerunBtn.className = 'primary';
         rerunBtn.style.marginTop = '8px';
         rerunBtn.style.background = 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)';
-        queueSection.appendChild(rerunBtn);
+        lexQueueSection.appendChild(rerunBtn);
         rerunBtn.addEventListener('click', rerunWithFleetMarque);
       }
       rerunBtn.textContent = `Rerun ${selectedFlagged.size} with Fleet Marque`;
@@ -318,7 +364,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   }
 
-  // Rerun selected items with Fleet Marque pricing
   async function rerunWithFleetMarque() {
     const vehicleIds = Array.from(selectedFlagged);
     if (vehicleIds.length === 0) return;
@@ -337,19 +382,178 @@ document.addEventListener('DOMContentLoaded', async () => {
       const data = await response.json();
 
       if (data.success) {
-        statusEl.className = 'status success';
-        statusEl.textContent = `${data.updated} items queued for rerun with FM pricing`;
+        lexStatusEl.className = 'status success';
+        lexStatusEl.textContent = `${data.updated} items queued for rerun with FM pricing`;
         selectedFlagged.clear();
-        await checkQueue();
+        await checkLexQueue();
       } else {
         throw new Error(data.error || 'Failed to queue reruns');
       }
     } catch (error) {
-      statusEl.className = 'status error';
-      statusEl.textContent = `Rerun failed: ${error.message}`;
+      lexStatusEl.className = 'status error';
+      lexStatusEl.textContent = `Rerun failed: ${error.message}`;
     }
 
     rerunBtn.disabled = false;
     updateRerunButton();
+  }
+
+  // ==================== DRIVALIA ====================
+
+  async function checkDrivaliaPageStatus() {
+    try {
+      const tabs = await chrome.tabs.query({ url: 'https://www.caafgenus3.co.uk/*' });
+
+      if (tabs.length === 0) {
+        drivaliaStatusEl.className = 'status warning';
+        drivaliaStatusEl.textContent = 'No Drivalia portal tab open';
+        drivaliaCaptureBtn.textContent = 'Open Drivalia Portal';
+        drivaliaCaptureBtn.disabled = false;
+        drivaliaCaptureBtn.onclick = () => {
+          chrome.tabs.create({ url: 'https://www.caafgenus3.co.uk/WebApp/fmoportal/index.html#/quoting/new' });
+        };
+        isDrivaliaReady = false;
+        drivaliaStatusDot.classList.remove('ready');
+        return;
+      }
+
+      // Check if quote form is ready
+      try {
+        const response = await chrome.tabs.sendMessage(tabs[0].id, { action: 'checkDrivaliaPageReady' });
+
+        if (response?.ready) {
+          drivaliaStatusEl.className = 'status success';
+          drivaliaStatusEl.textContent = 'Quote page ready - automation enabled';
+          drivaliaCaptureBtn.textContent = 'Page Ready ✓';
+          drivaliaCaptureBtn.disabled = true;
+          isDrivaliaReady = true;
+          drivaliaStatusDot.classList.add('ready');
+        } else {
+          drivaliaStatusEl.className = 'status info drivalia';
+          drivaliaStatusEl.textContent = 'Navigate to the New Quote page';
+          drivaliaCaptureBtn.textContent = 'Go to Quote Page';
+          drivaliaCaptureBtn.disabled = false;
+          drivaliaCaptureBtn.onclick = () => {
+            chrome.tabs.update(tabs[0].id, { url: 'https://www.caafgenus3.co.uk/WebApp/fmoportal/index.html#/quoting/new' });
+          };
+          isDrivaliaReady = false;
+          drivaliaStatusDot.classList.remove('ready');
+        }
+      } catch (e) {
+        drivaliaStatusEl.className = 'status info drivalia';
+        drivaliaStatusEl.textContent = 'Refresh the Drivalia page';
+        drivaliaCaptureBtn.textContent = 'Refresh Page';
+        drivaliaCaptureBtn.disabled = false;
+        drivaliaCaptureBtn.onclick = () => {
+          chrome.tabs.reload(tabs[0].id);
+        };
+        isDrivaliaReady = false;
+        drivaliaStatusDot.classList.remove('ready');
+      }
+    } catch (e) {
+      console.error('Drivalia status check failed:', e);
+    }
+  }
+
+  // Process Drivalia queue
+  drivaliaProcessQueueBtn.addEventListener('click', async () => {
+    drivaliaProcessQueueBtn.disabled = true;
+    drivaliaProcessQueueBtn.textContent = 'Processing...';
+    drivaliaStatusEl.className = 'status info drivalia';
+    drivaliaStatusEl.textContent = 'Processing queue - watch the page...';
+    drivaliaProgressContainer.style.display = 'block';
+
+    try {
+      const response = await chrome.runtime.sendMessage({
+        action: 'processDrivaliaQueue'
+      });
+
+      if (response.error) {
+        throw new Error(response.error);
+      }
+
+      drivaliaStatusEl.className = 'status success';
+      drivaliaStatusEl.textContent = `Done! ${response.processed} quotes processed, ${response.errors} errors`;
+      drivaliaProgressFill.style.width = '100%';
+
+      await checkDrivaliaQueue();
+    } catch (error) {
+      drivaliaStatusEl.className = 'status error';
+      drivaliaStatusEl.textContent = `Failed: ${error.message}`;
+    }
+
+    drivaliaProcessQueueBtn.disabled = false;
+    drivaliaProcessQueueBtn.textContent = 'Process Queue';
+  });
+
+  // Check Drivalia queue
+  async function checkDrivaliaQueue() {
+    try {
+      const response = await fetch(`${API_URL}/api/drivalia/quote-queue?_t=${Date.now()}`, {
+        cache: 'no-store',
+        headers: { 'Cache-Control': 'no-cache' }
+      });
+      const data = await response.json();
+
+      if (data.queue && data.queue.length > 0) {
+        drivaliaQueueSection.style.display = 'block';
+
+        const pending = data.queue.filter(q => q.status === 'pending').length;
+        const complete = data.queue.filter(q => q.status === 'complete').length;
+        const running = data.queue.filter(q => q.status === 'running').length;
+        const errors = data.queue.filter(q => q.status === 'error').length;
+        const total = data.queue.length;
+
+        const processed = complete + errors;
+        if (processed > 0 || running > 0) {
+          drivaliaProgressContainer.style.display = 'block';
+          drivaliaProgressFill.style.width = `${(processed / total) * 100}%`;
+        } else {
+          drivaliaProgressContainer.style.display = 'none';
+        }
+
+        let countText = [];
+        if (pending > 0) countText.push(`${pending} pending`);
+        if (running > 0) countText.push(`${running} running`);
+        if (complete > 0) countText.push(`${complete} done`);
+        if (errors > 0) countText.push(`${errors} failed`);
+        drivaliaQueueCount.textContent = countText.join(' • ');
+
+        drivaliaQueueList.innerHTML = data.queue.map(item => `
+          <div class="queue-item">
+            <div class="vehicle">${item.manufacturer || ''} ${item.model || ''}</div>
+            <div class="config">
+              ${item.capCode ? `CAP: ${item.capCode} • ` : ''}
+              ${item.term}mo • ${item.mileage?.toLocaleString() || 0}mi
+            </div>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 6px;">
+              <span class="status-badge ${item.status}">${item.status}</span>
+              ${item.status === 'complete' && item.result ?
+                `<span class="price">£${item.result.monthlyRental?.toFixed(2)}/mo</span>` :
+                ''}
+              ${item.status === 'error' ?
+                `<span class="error-text" title="${item.error || 'Unknown error'}">⚠️ ${(item.error || 'Error').substring(0, 30)}</span>` :
+                ''}
+            </div>
+          </div>
+        `).join('');
+
+        if (pending > 0 && isDrivaliaReady) {
+          drivaliaProcessQueueBtn.style.display = 'block';
+          drivaliaProcessQueueBtn.textContent = `Process ${pending} Quote${pending > 1 ? 's' : ''}`;
+          drivaliaProcessQueueBtn.disabled = false;
+        } else if (pending > 0) {
+          drivaliaProcessQueueBtn.style.display = 'block';
+          drivaliaProcessQueueBtn.textContent = 'Go to Quote page first';
+          drivaliaProcessQueueBtn.disabled = true;
+        } else {
+          drivaliaProcessQueueBtn.style.display = 'none';
+        }
+      } else {
+        drivaliaQueueSection.style.display = 'none';
+      }
+    } catch (error) {
+      console.error('Failed to check Drivalia queue:', error);
+    }
   }
 });

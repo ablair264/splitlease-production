@@ -25,6 +25,48 @@
       border-bottom: 1px solid rgba(255,255,255,0.1);
       padding-bottom: 12px;
     }
+    .provider-tabs {
+      display: flex;
+      gap: 4px;
+      margin-bottom: 16px;
+      background: rgba(255,255,255,0.05);
+      padding: 4px;
+      border-radius: 8px;
+    }
+    .provider-tab {
+      flex: 1;
+      padding: 10px 12px;
+      border: none;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      background: transparent;
+      color: rgba(255,255,255,0.5);
+    }
+    .provider-tab.active {
+      color: white;
+    }
+    .provider-tab.lex.active {
+      background: rgba(121, 213, 233, 0.2);
+      color: #79d5e9;
+    }
+    .provider-tab.drivalia.active {
+      background: rgba(236, 72, 153, 0.2);
+      color: #ec4899;
+    }
+    .provider-tab .status-dot {
+      display: inline-block;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      margin-right: 6px;
+      background: rgba(255,255,255,0.3);
+    }
+    .provider-tab .status-dot.ready {
+      background: #22c55e;
+    }
     .status {
       padding: 12px;
       border-radius: 8px;
@@ -52,6 +94,11 @@
       border: 1px solid rgba(121, 213, 233, 0.2);
       color: #79d5e9;
     }
+    .status.info.drivalia {
+      background: rgba(236, 72, 153, 0.1);
+      border: 1px solid rgba(236, 72, 153, 0.2);
+      color: #ec4899;
+    }
     button {
       width: 100%;
       padding: 12px;
@@ -66,6 +113,10 @@
     button.primary {
       background: linear-gradient(135deg, #79d5e9 0%, #5bc0d8 100%);
       color: #0f1419;
+    }
+    button.primary.drivalia {
+      background: linear-gradient(135deg, #ec4899 0%, #db2777 100%);
+      color: white;
     }
     button.secondary {
       background: rgba(255,255,255,0.1);
@@ -126,6 +177,9 @@
     .queue-header h2 {
       font-size: 14px;
       color: #79d5e9;
+    }
+    .queue-header h2.drivalia {
+      color: #ec4899;
     }
     .queue-count {
       font-size: 11px;
@@ -198,10 +252,12 @@
       background: linear-gradient(90deg, #79d5e9, #4ade80);
       transition: width 0.3s;
     }
+    .progress-bar .fill.drivalia {
+      background: linear-gradient(90deg, #ec4899, #f472b6);
+    }
     .error-text {
       cursor: help;
     }
-    /* Flagged items (Fleet Marque has better price) */
     .queue-item.flagged {
       background: rgba(245, 158, 11, 0.1);
       border: 1px solid rgba(245, 158, 11, 0.3);
@@ -233,55 +289,115 @@
       background: rgba(245, 158, 11, 0.2);
       color: #fbbf24;
     }
+    .provider-section {
+      display: none;
+    }
+    .provider-section.active {
+      display: block;
+    }
   </style>
 </head>
 <body>
-  <h1>🚗 Lex Quote Automation</h1>
+  <h1>🚗 SplitLease Quote Automation</h1>
 
-  <div id="status" class="status info">
-    Checking page status...
-  </div>
-
-  <button id="captureBtn" class="primary" disabled>
-    Checking...
-  </button>
-
-  <button id="testLoadBtn" class="secondary" style="display:none;">
-    Test Load Vehicle (BMW 3 Series)
-  </button>
-
-  <button id="testBtn" class="secondary" style="display:none;">
-    Test Full Quote (BMW 3 Series)
-  </button>
-
-  <div id="result" class="result" style="display:none;">
-    <div class="label">Monthly Rental</div>
-    <div class="value" id="resultValue">-</div>
-  </div>
-
-  <!-- Queue Section -->
-  <div id="queueSection" class="queue-section" style="display:none;">
-    <div class="queue-header">
-      <h2>Quote Queue</h2>
-      <span id="queueCount" class="queue-count">0 pending</span>
-    </div>
-    <div id="progressContainer" style="display:none;">
-      <div class="progress-bar">
-        <div class="fill" id="progressFill" style="width: 0%"></div>
-      </div>
-    </div>
-    <div id="queueList" class="queue-scroll"></div>
-    <button id="processQueueBtn" class="success" style="display:none;">
-      Process Queue
+  <!-- Provider Tabs -->
+  <div class="provider-tabs">
+    <button class="provider-tab lex active" data-provider="lex">
+      <span class="status-dot" id="lexStatusDot"></span>
+      Lex Autolease
+    </button>
+    <button class="provider-tab drivalia" data-provider="drivalia">
+      <span class="status-dot" id="drivaliaStatusDot"></span>
+      Drivalia
     </button>
   </div>
 
-  <div class="help">
-    <strong>How to use:</strong><br>
-    1. Login to Lex portal<br>
-    2. Go to Quote page<br>
-    3. Queue vehicles in SplitLease admin<br>
-    4. Click Process Queue and watch the automation
+  <!-- Lex Section -->
+  <div id="lexSection" class="provider-section active">
+    <div id="lexStatus" class="status info">
+      Checking page status...
+    </div>
+
+    <button id="lexCaptureBtn" class="primary" disabled>
+      Checking...
+    </button>
+
+    <button id="testLoadBtn" class="secondary" style="display:none;">
+      Test Load Vehicle (BMW 3 Series)
+    </button>
+
+    <button id="testBtn" class="secondary" style="display:none;">
+      Test Full Quote (BMW 3 Series)
+    </button>
+
+    <div id="lexResult" class="result" style="display:none;">
+      <div class="label">Monthly Rental</div>
+      <div class="value" id="lexResultValue">-</div>
+    </div>
+
+    <div id="lexQueueSection" class="queue-section" style="display:none;">
+      <div class="queue-header">
+        <h2>Quote Queue</h2>
+        <span id="lexQueueCount" class="queue-count">0 pending</span>
+      </div>
+      <div id="lexProgressContainer" style="display:none;">
+        <div class="progress-bar">
+          <div class="fill" id="lexProgressFill" style="width: 0%"></div>
+        </div>
+      </div>
+      <div id="lexQueueList" class="queue-scroll"></div>
+      <button id="lexProcessQueueBtn" class="success" style="display:none;">
+        Process Queue
+      </button>
+    </div>
+
+    <div class="help">
+      <strong>How to use:</strong><br>
+      1. Login to Lex portal<br>
+      2. Go to Quote page<br>
+      3. Queue vehicles in SplitLease admin<br>
+      4. Click Process Queue and watch the automation
+    </div>
+  </div>
+
+  <!-- Drivalia Section -->
+  <div id="drivaliaSection" class="provider-section">
+    <div id="drivaliaStatus" class="status info drivalia">
+      Checking page status...
+    </div>
+
+    <button id="drivaliaCaptureBtn" class="primary drivalia" disabled>
+      Checking...
+    </button>
+
+    <div id="drivaliaResult" class="result" style="display:none;">
+      <div class="label">Monthly Rental</div>
+      <div class="value" id="drivaliaResultValue">-</div>
+    </div>
+
+    <div id="drivaliaQueueSection" class="queue-section" style="display:none;">
+      <div class="queue-header">
+        <h2 class="drivalia">Quote Queue</h2>
+        <span id="drivaliaQueueCount" class="queue-count">0 pending</span>
+      </div>
+      <div id="drivaliaProgressContainer" style="display:none;">
+        <div class="progress-bar">
+          <div class="fill drivalia" id="drivaliaProgressFill" style="width: 0%"></div>
+        </div>
+      </div>
+      <div id="drivaliaQueueList" class="queue-scroll"></div>
+      <button id="drivaliaProcessQueueBtn" class="success" style="display:none;">
+        Process Queue
+      </button>
+    </div>
+
+    <div class="help">
+      <strong>How to use:</strong><br>
+      1. Login to Drivalia (CAAF Genus) portal<br>
+      2. Navigate to the New Quote page<br>
+      3. Queue vehicles in SplitLease admin<br>
+      4. Click Process Queue and watch the automation
+    </div>
   </div>
 
   <script src="sidepanel.js"></script>
