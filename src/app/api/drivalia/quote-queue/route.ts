@@ -377,6 +377,18 @@ export async function PATCH(req: NextRequest) {
       // Update or insert into provider_rates
       if (queueItem && monthlyRentalPence) {
         try {
+          // Map Drivalia contract types to standard provider_rates types
+          // BCH (Business Contract Hire) -> CHNM (Contract Hire No Maintenance)
+          // PCH (Personal Contract Hire) -> PCHNM (Personal Contract Hire No Maintenance)
+          const contractTypeMap: Record<string, string> = {
+            'BCH': 'CHNM',
+            'BCHNM': 'CHNM',
+            'CH': 'CHNM',
+            'PCH': 'PCHNM',
+            'PCHNM': 'PCHNM',
+          };
+          const normalizedContractType = contractTypeMap[queueItem.contract_type] || queueItem.contract_type;
+
           // Check if rate already exists with same parameters
           const existingRate = await sql`
             SELECT id, total_rental
@@ -385,7 +397,7 @@ export async function PATCH(req: NextRequest) {
               AND cap_code = ${queueItem.cap_code}
               AND term = ${queueItem.term}
               AND annual_mileage = ${queueItem.annual_mileage}
-              AND contract_type = ${queueItem.contract_type}
+              AND contract_type = ${normalizedContractType}
             LIMIT 1
           `;
 
@@ -416,7 +428,7 @@ export async function PATCH(req: NextRequest) {
             }
           } else {
             // Rate doesn't exist - need to get or create an import batch for Drivalia automation
-            const importId = await getOrCreateDrivaliaAutomationImport(queueItem.contract_type);
+            const importId = await getOrCreateDrivaliaAutomationImport(normalizedContractType);
 
             if (importId) {
               // Build payment plan string (e.g., "3+47" for 3 upfront + 47 months)
@@ -450,7 +462,7 @@ export async function PATCH(req: NextRequest) {
                   ${queueItem.vehicle_id},
                   ${importId},
                   'drivalia',
-                  ${queueItem.contract_type},
+                  ${normalizedContractType},
                   ${queueItem.manufacturer},
                   ${queueItem.model},
                   ${queueItem.variant},
@@ -465,7 +477,7 @@ export async function PATCH(req: NextRequest) {
                 )
               `;
               console.log(
-                `[ProviderRates] Inserted new Drivalia rate for ${queueItem.manufacturer} ${queueItem.model}: £${(monthlyRentalPence / 100).toFixed(2)} (Quote: ${result?.quoteId || 'N/A'})`
+                `[ProviderRates] Inserted new Drivalia rate for ${queueItem.manufacturer} ${queueItem.model}: £${(monthlyRentalPence / 100).toFixed(2)} (Quote: ${result?.quoteId || 'N/A'}) [${normalizedContractType}]`
               );
             }
           }
