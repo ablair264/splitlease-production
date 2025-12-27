@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { neon } from "@neondatabase/serverless";
+import { calculateRateScore } from "@/lib/rates/scoring";
 
 const sql = neon(process.env.DATABASE_URL!);
 
@@ -89,6 +90,9 @@ type QueueItemResult = {
   monthlyRentalIncVat?: number;
   initialRental?: number;
   p11d?: number;
+  co2?: number;
+  basicPrice?: number;
+  fuelType?: string;
 };
 
 /**
@@ -339,6 +343,10 @@ export async function PATCH(req: NextRequest) {
       const p11dPence = result.p11d
         ? Math.round(result.p11d * 100)
         : null;
+      const co2Gkm = result.co2 ?? null;
+      const basicPricePence = result.basicPrice
+        ? Math.round(result.basicPrice * 100)
+        : null;
 
       if (vehicleId) {
         await sql`
@@ -401,29 +409,50 @@ export async function PATCH(req: NextRequest) {
             LIMIT 1
           `;
 
+          // Calculate score for this rate
+          const upfrontPayments = 3; // Default for Drivalia
+          const remainingPayments = queueItem.term - upfrontPayments;
+          const paymentPlan = `${upfrontPayments}+${remainingPayments}`;
+
+          const scoreResult = calculateRateScore({
+            monthlyRentalPence,
+            term: queueItem.term,
+            paymentPlan,
+            basicListPricePence: basicPricePence,
+            p11dPence,
+            contractType: normalizedContractType,
+            manufacturer: queueItem.manufacturer,
+            fuelType: result?.fuelType || null,
+            evRangeMiles: null,
+            fuelEcoMpg: null,
+          });
+
           if (existingRate.length > 0) {
             // Rate exists - update with new quote info
             const existingPrice = existingRate[0].total_rental;
             const rawData = result?.quoteId ? { quote_reference: result.quoteId } : null;
 
-            // Always update to store latest quote reference
+            // Always update to store latest quote reference and score
             await sql`
               UPDATE provider_rates
               SET
                 total_rental = ${monthlyRentalPence},
                 p11d = ${p11dPence},
-                raw_data = ${rawData ? JSON.stringify(rawData) : null},
-                updated_at = NOW()
+                co2_gkm = ${co2Gkm},
+                basic_list_price = ${basicPricePence},
+                score = ${scoreResult.score},
+                score_breakdown = ${scoreResult.breakdown ? JSON.stringify(scoreResult.breakdown) : null},
+                raw_data = ${rawData ? JSON.stringify(rawData) : null}
               WHERE id = ${existingRate[0].id}
             `;
 
             if (existingPrice !== monthlyRentalPence) {
               console.log(
-                `[ProviderRates] Updated Drivalia rate for ${queueItem.manufacturer} ${queueItem.model}: £${(existingPrice / 100).toFixed(2)} → £${(monthlyRentalPence / 100).toFixed(2)} (Quote: ${result?.quoteId || 'N/A'})`
+                `[ProviderRates] Updated Drivalia rate for ${queueItem.manufacturer} ${queueItem.model}: £${(existingPrice / 100).toFixed(2)} → £${(monthlyRentalPence / 100).toFixed(2)} (Score: ${scoreResult.score}, Quote: ${result?.quoteId || 'N/A'})`
               );
             } else {
               console.log(
-                `[ProviderRates] Drivalia rate refreshed for ${queueItem.manufacturer} ${queueItem.model}: £${(monthlyRentalPence / 100).toFixed(2)} (Quote: ${result?.quoteId || 'N/A'})`
+                `[ProviderRates] Drivalia rate refreshed for ${queueItem.manufacturer} ${queueItem.model}: £${(monthlyRentalPence / 100).toFixed(2)} (Score: ${scoreResult.score}, Quote: ${result?.quoteId || 'N/A'})`
               );
             }
           } else {
@@ -431,11 +460,6 @@ export async function PATCH(req: NextRequest) {
             const importId = await getOrCreateDrivaliaAutomationImport(normalizedContractType);
 
             if (importId) {
-              // Build payment plan string (e.g., "3+47" for 3 upfront + 47 months)
-              const upfrontPayments = 3; // Default for Drivalia
-              const remainingPayments = queueItem.term - upfrontPayments;
-              const paymentPlan = `${upfrontPayments}+${remainingPayments}`;
-
               // Store quote reference in raw_data
               const rawData = result?.quoteId ? { quote_reference: result.quoteId } : null;
 
@@ -454,9 +478,12 @@ export async function PATCH(req: NextRequest) {
                   payment_plan,
                   total_rental,
                   p11d,
+                  co2_gkm,
+                  basic_list_price,
+                  score,
+                  score_breakdown,
                   raw_data,
-                  created_at,
-                  updated_at
+                  created_at
                 ) VALUES (
                   ${queueItem.cap_code},
                   ${queueItem.vehicle_id},
@@ -471,13 +498,16 @@ export async function PATCH(req: NextRequest) {
                   ${paymentPlan},
                   ${monthlyRentalPence},
                   ${p11dPence},
+                  ${co2Gkm},
+                  ${basicPricePence},
+                  ${scoreResult.score},
+                  ${scoreResult.breakdown ? JSON.stringify(scoreResult.breakdown) : null},
                   ${rawData ? JSON.stringify(rawData) : null},
-                  NOW(),
                   NOW()
                 )
               `;
               console.log(
-                `[ProviderRates] Inserted new Drivalia rate for ${queueItem.manufacturer} ${queueItem.model}: £${(monthlyRentalPence / 100).toFixed(2)} (Quote: ${result?.quoteId || 'N/A'}) [${normalizedContractType}]`
+                `[ProviderRates] Inserted new Drivalia rate for ${queueItem.manufacturer} ${queueItem.model}: £${(monthlyRentalPence / 100).toFixed(2)} (Score: ${scoreResult.score}, Quote: ${result?.quoteId || 'N/A'}) [${normalizedContractType}]`
               );
             }
           }

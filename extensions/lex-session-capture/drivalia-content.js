@@ -688,7 +688,7 @@ async function extractQuoteResult(storedPricingData = null) {
       console.log('[Drivalia] Using summary from lastQuoteResponse');
     } else {
       console.error('[Drivalia] No pricing data available!');
-      return { quoteId: null, monthlyRental: null, initialRental: null, p11d: null };
+      return { quoteId: null, monthlyRental: null, initialRental: null, p11d: null, co2: null, basicPrice: null };
     }
 
     const assetLines = summary.assetLines || [];
@@ -697,6 +697,14 @@ async function extractQuoteResult(storedPricingData = null) {
 
     // Get P11D from asset line
     p11d = p11d || assetLine.p11d || null;
+
+    // Get CO2 emissions (note: Drivalia uses "cO2" not "co2")
+    const co2 = assetLine.cO2 ?? null;
+
+    // Get basic vehicle price from subject
+    const basicPrice = assetLine.subject?.price ?? null;
+
+    console.log('[Drivalia] Additional data - CO2:', co2, 'Basic Price:', basicPrice);
 
     // Get initial payment (first in schedule, headline: false)
     const initialPayment = schedule[0] || {};
@@ -728,7 +736,9 @@ async function extractQuoteResult(storedPricingData = null) {
       monthlyRentalIncVat: monthlyRentalIncVat,
       initialRental: initialRentalExVat,
       initialRentalIncVat: initialRentalIncVat,
-      p11d: p11d
+      p11d: p11d,
+      co2: co2,
+      basicPrice: basicPrice
     };
 
     console.log('[Drivalia] Extracted result:', result);
@@ -739,7 +749,7 @@ async function extractQuoteResult(storedPricingData = null) {
     return result;
   } catch (e) {
     console.error('[Drivalia] Error parsing response:', e);
-    return { quoteId: null, monthlyRental: null, initialRental: null, p11d: null };
+    return { quoteId: null, monthlyRental: null, initialRental: null, p11d: null, co2: null, basicPrice: null };
   }
 }
 
