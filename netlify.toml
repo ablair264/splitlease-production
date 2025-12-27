@@ -1,0 +1,16 @@
+[build]
+  command = "npm ci && npm run build"
+  publish = ".next"
+
+[build.environment]
+  NODE_VERSION = "20"
+  NPM_FLAGS = "--prefer-offline --no-audit --no-fund"
+  NEXT_TELEMETRY_DISABLED = "1"
+
+# Increase build timeout
+[build.processing]
+  skip_processing = true
+
+# Cache node_modules more efficiently
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
