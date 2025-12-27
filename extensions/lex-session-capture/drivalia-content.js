@@ -248,9 +248,17 @@ async function runQuote({ capCode, term, mileage, contractType, companyName = 'Q
       await sleep(2000);
     }
 
-    // Step 0: Wait for page to fully load
+    // Step 0: Wait for page to fully load and dismiss any existing modals
     console.log('[Drivalia] Waiting for page to load...');
     await sleep(1500);
+
+    // Dismiss any existing DPA modal from previous sessions
+    const existingDpaBtn = document.querySelector('button[data-hook="dpaaccept"]');
+    if (existingDpaBtn) {
+      console.log('[Drivalia] Dismissing existing DPA Agreement modal');
+      clickElement(existingDpaBtn);
+      await sleep(1000);
+    }
 
     // Step 1: Set Customer Type using MAIN world Angular helper
     // The select element has data-hook="quoting.customer.customertype" and uses AngularJS
@@ -548,12 +556,47 @@ async function runQuote({ capCode, term, mileage, contractType, companyName = 'Q
 
     // Step 17: Click Save Quote (from Playwright: getByRole('button', { name: ' Save Quote' }) - note space)
     console.log('[Drivalia] Saving quote...');
-    // DON'T clear lastQuoteResponse - we need the pricing from Recalculate!
+    // Store pricing from Recalculate before Save overwrites it
+    const pricingData = lastQuoteResponse ? {
+      summary: lastQuoteResponse.summary,
+      p11d: lastQuoteResponse.summary?.assetLines?.[0]?.p11d
+    } : null;
+    console.log('[Drivalia] Stored pricing data before save:', !!pricingData);
+
+    lastQuoteResponse = null; // Clear to capture the save response for quote ID
     const saveQuoteBtn = await waitForElementByText('Save Quote', 'button');
     clickElement(saveQuoteBtn);
-    await sleep(3000); // Wait for save
 
-    // Step 18: Extract results (pricing came from /calculate/, quote ID comes from save)
+    // Wait for save response (contains applicationId)
+    console.log('[Drivalia] Waiting for save response...');
+    let saveWait = 0;
+    while (!lastQuoteResponse && saveWait < 10000) {
+      await sleep(200);
+      saveWait += 200;
+    }
+    console.log('[Drivalia] Save response captured:', !!lastQuoteResponse, 'after', saveWait, 'ms');
+
+    // Merge pricing data with save response
+    if (pricingData && lastQuoteResponse) {
+      lastQuoteResponse._pricingData = pricingData;
+    }
+
+    // Step 18: Handle DPA Agreement modal if it appears (wait up to 3 seconds)
+    console.log('[Drivalia] Checking for DPA Agreement modal...');
+    let dpaWait = 0;
+    while (dpaWait < 3000) {
+      const dpaAcceptBtn = document.querySelector('button[data-hook="dpaaccept"]');
+      if (dpaAcceptBtn) {
+        console.log('[Drivalia] DPA Agreement modal found - clicking Accept');
+        clickElement(dpaAcceptBtn);
+        await sleep(1500);
+        break;
+      }
+      await sleep(300);
+      dpaWait += 300;
+    }
+
+    // Step 19: Extract results (pricing came from /calculate/, quote ID comes from save)
     const result = await extractQuoteResult();
     console.log('[Drivalia] Quote completed:', result);
 
@@ -585,19 +628,33 @@ async function extractQuoteResult() {
     console.log('[Drivalia] Response keys:', Object.keys(lastQuoteResponse));
 
     try {
-      // The Drivalia /calculate response structure:
-      // - summary.assetLines[0].p11d - P11D value
-      // - summary.assetLines[0].schedule[0] - Initial payment (headline: false)
-      // - summary.assetLines[0].schedule[1] - Monthly payment (headline: true)
-      // - assets[0].applicationId - Quote ID (only set after save)
+      // The save response structure:
+      // - assets[0].applicationId - Quote ID
+      // - _pricingData.summary.assetLines[0] - Pricing from /calculate/ response (we stored this before save)
 
-      const summary = lastQuoteResponse.summary || {};
+      // Get quote ID from save response
+      const assets = lastQuoteResponse.assets || [];
+      let quoteNumber = assets[0]?.applicationId?.toString() || null;
+      console.log('[Drivalia] Quote ID from save response:', quoteNumber);
+
+      // If no applicationId, try to get from current URL after save
+      if (!quoteNumber && window.location.hash.includes('/quoting/')) {
+        const match = window.location.hash.match(/\/quoting\/(\d+)/);
+        if (match) {
+          quoteNumber = match[1];
+          console.log('[Drivalia] Quote ID from URL:', quoteNumber);
+        }
+      }
+
+      // Get pricing from stored data (captured before save) or current response
+      const pricingData = lastQuoteResponse._pricingData || lastQuoteResponse;
+      const summary = pricingData.summary || lastQuoteResponse.summary || {};
       const assetLines = summary.assetLines || [];
       const assetLine = assetLines[0] || {};
       const schedule = assetLine.schedule || [];
 
       // Get P11D from asset line
-      const p11d = assetLine.p11d || null;
+      const p11d = assetLine.p11d || pricingData.p11d || null;
 
       // Get initial payment (first in schedule, headline: false)
       const initialPayment = schedule[0] || {};
@@ -608,18 +665,6 @@ async function extractQuoteResult() {
       const monthlyPayment = schedule[1] || {};
       const monthlyRentalExVat = monthlyPayment.netValue || null;
       const monthlyRentalIncVat = monthlyPayment.value || null;
-
-      // Get quote number from assets or URL
-      const assets = lastQuoteResponse.assets || [];
-      let quoteNumber = assets[0]?.applicationId?.toString() || null;
-
-      // If no applicationId, try to get from current URL after save
-      if (!quoteNumber && window.location.hash.includes('/quoting/')) {
-        const match = window.location.hash.match(/\/quoting\/(\d+)/);
-        if (match) {
-          quoteNumber = match[1];
-        }
-      }
 
       const result = {
         quoteId: quoteNumber,

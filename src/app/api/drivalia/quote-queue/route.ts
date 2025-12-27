@@ -390,24 +390,28 @@ export async function PATCH(req: NextRequest) {
           `;
 
           if (existingRate.length > 0) {
-            // Rate exists - check if price is different
+            // Rate exists - update with new quote info
             const existingPrice = existingRate[0].total_rental;
+            const rawData = result?.quoteId ? { quote_reference: result.quoteId } : null;
+
+            // Always update to store latest quote reference
+            await sql`
+              UPDATE provider_rates
+              SET
+                total_rental = ${monthlyRentalPence},
+                p11d = ${p11dPence},
+                raw_data = ${rawData ? JSON.stringify(rawData) : null},
+                updated_at = NOW()
+              WHERE id = ${existingRate[0].id}
+            `;
+
             if (existingPrice !== monthlyRentalPence) {
-              // Price changed - update the rate
-              await sql`
-                UPDATE provider_rates
-                SET
-                  total_rental = ${monthlyRentalPence},
-                  p11d = ${p11dPence},
-                  updated_at = NOW()
-                WHERE id = ${existingRate[0].id}
-              `;
               console.log(
-                `[ProviderRates] Updated Drivalia rate for ${queueItem.manufacturer} ${queueItem.model}: £${(existingPrice / 100).toFixed(2)} → £${(monthlyRentalPence / 100).toFixed(2)}`
+                `[ProviderRates] Updated Drivalia rate for ${queueItem.manufacturer} ${queueItem.model}: £${(existingPrice / 100).toFixed(2)} → £${(monthlyRentalPence / 100).toFixed(2)} (Quote: ${result?.quoteId || 'N/A'})`
               );
             } else {
               console.log(
-                `[ProviderRates] Drivalia rate unchanged for ${queueItem.manufacturer} ${queueItem.model}: £${(monthlyRentalPence / 100).toFixed(2)}`
+                `[ProviderRates] Drivalia rate refreshed for ${queueItem.manufacturer} ${queueItem.model}: £${(monthlyRentalPence / 100).toFixed(2)} (Quote: ${result?.quoteId || 'N/A'})`
               );
             }
           } else {
@@ -415,6 +419,14 @@ export async function PATCH(req: NextRequest) {
             const importId = await getOrCreateDrivaliaAutomationImport(queueItem.contract_type);
 
             if (importId) {
+              // Build payment plan string (e.g., "3+47" for 3 upfront + 47 months)
+              const upfrontPayments = 3; // Default for Drivalia
+              const remainingPayments = queueItem.term - upfrontPayments;
+              const paymentPlan = `${upfrontPayments}+${remainingPayments}`;
+
+              // Store quote reference in raw_data
+              const rawData = result?.quoteId ? { quote_reference: result.quoteId } : null;
+
               await sql`
                 INSERT INTO provider_rates (
                   cap_code,
@@ -427,8 +439,10 @@ export async function PATCH(req: NextRequest) {
                   variant,
                   term,
                   annual_mileage,
+                  payment_plan,
                   total_rental,
                   p11d,
+                  raw_data,
                   created_at,
                   updated_at
                 ) VALUES (
@@ -442,14 +456,16 @@ export async function PATCH(req: NextRequest) {
                   ${queueItem.variant},
                   ${queueItem.term},
                   ${queueItem.annual_mileage},
+                  ${paymentPlan},
                   ${monthlyRentalPence},
                   ${p11dPence},
+                  ${rawData ? JSON.stringify(rawData) : null},
                   NOW(),
                   NOW()
                 )
               `;
               console.log(
-                `[ProviderRates] Inserted new Drivalia rate for ${queueItem.manufacturer} ${queueItem.model}: £${(monthlyRentalPence / 100).toFixed(2)}`
+                `[ProviderRates] Inserted new Drivalia rate for ${queueItem.manufacturer} ${queueItem.model}: £${(monthlyRentalPence / 100).toFixed(2)} (Quote: ${result?.quoteId || 'N/A'})`
               );
             }
           }
