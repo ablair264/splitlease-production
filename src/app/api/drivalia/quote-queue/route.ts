@@ -3,6 +3,75 @@ import { neon } from "@neondatabase/serverless";
 
 const sql = neon(process.env.DATABASE_URL!);
 
+// Cache for import IDs to avoid repeated lookups
+const importIdCache: Record<string, string> = {};
+
+/**
+ * Get or create a ratebook_imports record for Drivalia automation quotes
+ * This is needed because provider_rates requires an import_id
+ */
+async function getOrCreateDrivaliaAutomationImport(contractType: string): Promise<string | null> {
+  const cacheKey = `drivalia_automation_${contractType}`;
+
+  // Check cache first
+  if (importIdCache[cacheKey]) {
+    return importIdCache[cacheKey];
+  }
+
+  try {
+    // Look for existing Drivalia automation import for this contract type
+    const existing = await sql`
+      SELECT id FROM ratebook_imports
+      WHERE provider_code = 'drivalia'
+        AND contract_type = ${contractType}
+        AND batch_id LIKE 'drivalia_automation_%'
+        AND is_latest = true
+      ORDER BY created_at DESC
+      LIMIT 1
+    `;
+
+    if (existing.length > 0) {
+      importIdCache[cacheKey] = existing[0].id as string;
+      return importIdCache[cacheKey];
+    }
+
+    // Create new import batch for Drivalia automation
+    const batchId = `drivalia_automation_${contractType.toLowerCase()}_${Date.now()}`;
+    const result = await sql`
+      INSERT INTO ratebook_imports (
+        provider_code,
+        contract_type,
+        batch_id,
+        file_name,
+        status,
+        is_latest,
+        created_at,
+        completed_at
+      ) VALUES (
+        'drivalia',
+        ${contractType},
+        ${batchId},
+        'Drivalia Automation Quotes',
+        'completed',
+        true,
+        NOW(),
+        NOW()
+      )
+      RETURNING id
+    `;
+
+    if (result.length > 0) {
+      importIdCache[cacheKey] = result[0].id as string;
+      return importIdCache[cacheKey];
+    }
+
+    return null;
+  } catch (error) {
+    console.error("Failed to get/create Drivalia automation import:", error);
+    return null;
+  }
+}
+
 type QueueItemInput = {
   vehicleId: string;
   capCode: string;
@@ -267,6 +336,9 @@ export async function PATCH(req: NextRequest) {
       const initialRentalPence = result.initialRental
         ? Math.round(result.initialRental * 100)
         : null;
+      const p11dPence = result.p11d
+        ? Math.round(result.p11d * 100)
+        : null;
 
       if (vehicleId) {
         await sql`
@@ -295,6 +367,96 @@ export async function PATCH(req: NextRequest) {
             AND status IN ('pending', 'running')
         `;
       }
+
+      // Get queue item details for provider_rates update
+      const queueItemResult = vehicleId
+        ? await sql`SELECT * FROM drivalia_quotes WHERE vehicle_id = ${vehicleId} ORDER BY created_at DESC LIMIT 1`
+        : await sql`SELECT * FROM drivalia_quotes WHERE cap_code = ${capCode} AND term = ${term} AND annual_mileage = ${mileage} AND contract_type = ${contractType} ORDER BY created_at DESC LIMIT 1`;
+      const queueItem = queueItemResult[0];
+
+      // Update or insert into provider_rates
+      if (queueItem && monthlyRentalPence) {
+        try {
+          // Check if rate already exists with same parameters
+          const existingRate = await sql`
+            SELECT id, total_rental
+            FROM provider_rates
+            WHERE provider_code = 'drivalia'
+              AND cap_code = ${queueItem.cap_code}
+              AND term = ${queueItem.term}
+              AND annual_mileage = ${queueItem.annual_mileage}
+              AND contract_type = ${queueItem.contract_type}
+            LIMIT 1
+          `;
+
+          if (existingRate.length > 0) {
+            // Rate exists - check if price is different
+            const existingPrice = existingRate[0].total_rental;
+            if (existingPrice !== monthlyRentalPence) {
+              // Price changed - update the rate
+              await sql`
+                UPDATE provider_rates
+                SET
+                  total_rental = ${monthlyRentalPence},
+                  p11d = ${p11dPence},
+                  updated_at = NOW()
+                WHERE id = ${existingRate[0].id}
+              `;
+              console.log(
+                `[ProviderRates] Updated Drivalia rate for ${queueItem.manufacturer} ${queueItem.model}: £${(existingPrice / 100).toFixed(2)} → £${(monthlyRentalPence / 100).toFixed(2)}`
+              );
+            } else {
+              console.log(
+                `[ProviderRates] Drivalia rate unchanged for ${queueItem.manufacturer} ${queueItem.model}: £${(monthlyRentalPence / 100).toFixed(2)}`
+              );
+            }
+          } else {
+            // Rate doesn't exist - need to get or create an import batch for Drivalia automation
+            const importId = await getOrCreateDrivaliaAutomationImport(queueItem.contract_type);
+
+            if (importId) {
+              await sql`
+                INSERT INTO provider_rates (
+                  cap_code,
+                  vehicle_id,
+                  import_id,
+                  provider_code,
+                  contract_type,
+                  manufacturer,
+                  model,
+                  variant,
+                  term,
+                  annual_mileage,
+                  total_rental,
+                  p11d,
+                  created_at,
+                  updated_at
+                ) VALUES (
+                  ${queueItem.cap_code},
+                  ${queueItem.vehicle_id},
+                  ${importId},
+                  'drivalia',
+                  ${queueItem.contract_type},
+                  ${queueItem.manufacturer},
+                  ${queueItem.model},
+                  ${queueItem.variant},
+                  ${queueItem.term},
+                  ${queueItem.annual_mileage},
+                  ${monthlyRentalPence},
+                  ${p11dPence},
+                  NOW(),
+                  NOW()
+                )
+              `;
+              console.log(
+                `[ProviderRates] Inserted new Drivalia rate for ${queueItem.manufacturer} ${queueItem.model}: £${(monthlyRentalPence / 100).toFixed(2)}`
+              );
+            }
+          }
+        } catch (prError) {
+          console.error("Failed to update provider_rates for Drivalia:", prError);
+        }
+      }
     }
 
     return NextResponse.json({ success: true });
@@ -309,11 +471,11 @@ export async function PATCH(req: NextRequest) {
 
 /**
  * DELETE /api/drivalia/quote-queue
- * Clear the queue (removes pending/running items)
+ * Clear the entire queue
  */
 export async function DELETE() {
   try {
-    await sql`DELETE FROM drivalia_quotes WHERE status IN ('pending', 'running')`;
+    await sql`DELETE FROM drivalia_quotes`;
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error("Error clearing Drivalia queue:", error);

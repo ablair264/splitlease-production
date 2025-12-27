@@ -581,11 +581,11 @@ export async function PUT(req: NextRequest) {
 
 /**
  * DELETE /api/lex-autolease/quote-queue
- * Clear the queue (removes pending/running items, keeps completed for history)
+ * Clear the entire queue (historical quotes are preserved in lex_quotes table)
  */
 export async function DELETE() {
   try {
-    await sql`DELETE FROM lex_quote_queue WHERE status IN ('pending', 'running')`;
+    await sql`DELETE FROM lex_quote_queue`;
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error("Error clearing queue:", error);

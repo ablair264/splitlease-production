@@ -568,8 +568,8 @@
           <select id="lexFilterManufacturer">
             <option value="">All Makes</option>
           </select>
-          <select id="lexFilterFuelType">
-            <option value="">All Fuel</option>
+          <select id="lexFilterModel" disabled>
+            <option value="">All Models</option>
           </select>
         </div>
         <div class="filter-row">
@@ -650,9 +650,14 @@
         </div>
       </div>
       <div id="lexQueueList" class="queue-scroll"></div>
-      <button id="lexProcessQueueBtn" class="success" style="display:none;">
-        Process Queue
-      </button>
+      <div style="display:flex;gap:8px;">
+        <button id="lexProcessQueueBtn" class="success" style="display:none;flex:1;">
+          Process Queue
+        </button>
+        <button id="lexClearQueueBtn" class="secondary" style="display:none;flex:0 0 auto;padding:12px 16px;">
+          Clear
+        </button>
+      </div>
     </div>
 
     <div class="help">
@@ -686,8 +691,8 @@
           <select id="drivaliaFilterManufacturer">
             <option value="">All Makes</option>
           </select>
-          <select id="drivaliaFilterFuelType">
-            <option value="">All Fuel</option>
+          <select id="drivaliaFilterModel" disabled>
+            <option value="">All Models</option>
           </select>
         </div>
         <div class="filter-row drivalia">
@@ -768,9 +773,14 @@
         </div>
       </div>
       <div id="drivaliaQueueList" class="queue-scroll"></div>
-      <button id="drivaliaProcessQueueBtn" class="success" style="display:none;">
-        Process Queue
-      </button>
+      <div style="display:flex;gap:8px;">
+        <button id="drivaliaProcessQueueBtn" class="success" style="display:none;flex:1;">
+          Process Queue
+        </button>
+        <button id="drivaliaClearQueueBtn" class="secondary" style="display:none;flex:0 0 auto;padding:12px 16px;">
+          Clear
+        </button>
+      </div>
     </div>
 
     <div class="help">
