@@ -9,6 +9,13 @@ export interface ScoreBreakdown {
   totalPayments: number;
 }
 
+export interface TermsHolderOtr {
+  providerOtr: number; // Provider's OTR in GBP
+  termsOtr: number; // Terms holder OTR in GBP
+  savingsGbp: number; // Potential savings in GBP
+  savingsPercent: number; // Savings as percentage
+}
+
 export interface VehicleTableRow {
   id: string;
   capCode: string;
@@ -32,6 +39,7 @@ export interface VehicleTableRow {
   isEnabled: boolean;
   logoUrl: string;
   rateCount: number;
+  termsHolderOtr: TermsHolderOtr | null; // Opportunity for better rate with terms holder OTR
 }
 
 export interface FilterOptions {

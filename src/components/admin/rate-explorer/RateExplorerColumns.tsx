@@ -11,6 +11,7 @@ import {
   IntegrityBadge,
   BestFunderBadge,
   FuelTypeBadge,
+  OtrOpportunityBadge,
 } from "./cells";
 
 const columnHelper = createColumnHelper<VehicleTableRow>();
@@ -171,6 +172,26 @@ export function createRateExplorerColumns(options: ColumnOptions = {}): ColumnDe
       enableSorting: true,
       sortingFn: (rowA, rowB) =>
         rowA.original.bestFunder.priceGbp - rowB.original.bestFunder.priceGbp,
+    }),
+
+    // OTR Opportunity - when terms holder OTR could yield better rate
+    columnHelper.accessor("termsHolderOtr", {
+      id: "otrOpportunity",
+      header: () => (
+        <span className="text-emerald-400" title="Potential savings using terms holder OTR">
+          OTR
+        </span>
+      ),
+      cell: ({ getValue }) => (
+        <OtrOpportunityBadge data={getValue()} />
+      ),
+      size: 90,
+      enableSorting: true,
+      sortingFn: (rowA, rowB) => {
+        const aVal = rowA.original.termsHolderOtr?.savingsGbp || 0;
+        const bVal = rowB.original.termsHolderOtr?.savingsGbp || 0;
+        return aVal - bVal;
+      },
     }),
 
     // Strength (provider count)
@@ -369,6 +390,7 @@ export const defaultColumnOrder = [
   "p11dGbp",
   "score",
   "bestFunder",
+  "otrOpportunity",
   "strength",
   "integrity",
 ];
@@ -386,6 +408,7 @@ export const defaultColumnVisibility: Record<string, boolean> = {
   p11dGbp: true,
   score: true,
   bestFunder: true,
+  otrOpportunity: true,
   strength: true,
   integrity: true,
 };

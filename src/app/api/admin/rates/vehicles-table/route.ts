@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { providerRates, ratebookImports, vehicleStatus } from "@/lib/db/schema";
-import { sql, eq, and, isNotNull, asc, or, ilike, inArray, gte, lte } from "drizzle-orm";
+import { providerRates, ratebookImports, vehicleStatus, fleetMarqueTerms } from "@/lib/db/schema";
+import { sql, eq, and, isNotNull, asc, or, ilike, inArray, gte, lte, desc } from "drizzle-orm";
 
 // Provider display names
 const PROVIDER_NAMES: Record<string, string> = {
@@ -133,6 +133,16 @@ export async function GET(request: NextRequest) {
           ORDER BY pr2.total_rental ASC
           LIMIT 1
         )`.as("bestPriceScore"),
+        // Get OTR price from the rate with the best price
+        bestOtrPrice: sql<number>`(
+          SELECT pr2.otr_price
+          FROM provider_rates pr2
+          INNER JOIN ratebook_imports ri2 ON pr2.import_id = ri2.id
+          WHERE pr2.vehicle_id = ${providerRates.vehicleId}
+          AND ri2.is_latest = true
+          ORDER BY pr2.total_rental ASC
+          LIMIT 1
+        )`.as("bestOtrPrice"),
         providerCount: sql<number>`COUNT(DISTINCT ${providerRates.providerCode})`.as("providerCount"),
         providers: sql<string>`STRING_AGG(DISTINCT ${providerRates.providerCode}, ',')`.as("providers"),
         latestRatebookDate: sql<Date>`MAX(COALESCE(${ratebookImports.ratebookDate}, ${ratebookImports.createdAt}))`.as("latestRatebookDate"),
@@ -165,6 +175,37 @@ export async function GET(request: NextRequest) {
           isSpecialOffer: s.isSpecialOffer || false,
           isEnabled: s.isEnabled !== false,
         });
+      });
+    }
+
+    // Get terms holder OTR prices for all cap codes
+    const capCodes = vehicleAggregates
+      .map((v) => v.capCode)
+      .filter((code): code is string => code !== null);
+
+    let termsHolderMap = new Map<string, number>(); // capCode -> discounted price in pence
+
+    if (capCodes.length > 0) {
+      // Get the most recent terms holder price for each cap code
+      const termsHolder = await db
+        .select({
+          capCode: fleetMarqueTerms.capCode,
+          discountedPrice: fleetMarqueTerms.discountedPrice,
+        })
+        .from(fleetMarqueTerms)
+        .where(
+          and(
+            inArray(fleetMarqueTerms.capCode, capCodes),
+            isNotNull(fleetMarqueTerms.discountedPrice)
+          )
+        )
+        .orderBy(desc(fleetMarqueTerms.scrapedAt));
+
+      // Use first (most recent) entry for each cap code
+      termsHolder.forEach((t) => {
+        if (!termsHolderMap.has(t.capCode) && t.discountedPrice) {
+          termsHolderMap.set(t.capCode, t.discountedPrice);
+        }
       });
     }
 
@@ -202,6 +243,22 @@ export async function GET(request: NextRequest) {
           }
         }
 
+        // Calculate terms holder OTR opportunity
+        let termsHolderOtr = null;
+        const providerOtr = (v as any).bestOtrPrice ? Number((v as any).bestOtrPrice) : null;
+        const termsOtr = v.capCode ? termsHolderMap.get(v.capCode) : null;
+
+        if (providerOtr && termsOtr && termsOtr < providerOtr) {
+          const savingsPence = providerOtr - termsOtr;
+          const savingsPercent = (savingsPence / providerOtr) * 100;
+          termsHolderOtr = {
+            providerOtr: Math.round(providerOtr / 100), // Convert to GBP
+            termsOtr: Math.round(termsOtr / 100), // Convert to GBP
+            savingsGbp: Math.round(savingsPence / 100), // Convert to GBP
+            savingsPercent: Math.round(savingsPercent * 10) / 10, // 1 decimal place
+          };
+        }
+
         return {
           id: v.vehicleId,
           capCode: v.capCode,
@@ -229,6 +286,7 @@ export async function GET(request: NextRequest) {
           isEnabled: status.isEnabled,
           logoUrl,
           rateCount: Number(v.rateCount),
+          termsHolderOtr,
         };
       })
       .filter((v): v is NonNullable<typeof v> => v !== null);

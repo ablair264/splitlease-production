@@ -448,12 +448,12 @@ export async function PATCH(req: NextRequest) {
             const existingPrice = existingRate[0].total_rental;
             if (existingPrice !== monthlyRentalPence) {
               // Price changed - update the rate
+              // Note: brokerOtrp is already in pence from the extension
               await sql`
                 UPDATE provider_rates
                 SET
                   total_rental = ${monthlyRentalPence},
-                  p11d = ${otrpPence},
-                  updated_at = NOW()
+                  otr_price = ${result.brokerOtrp || null}
                 WHERE id = ${existingRate[0].id}
               `;
               console.log(
@@ -469,6 +469,7 @@ export async function PATCH(req: NextRequest) {
             let importId = await getOrCreateLexAutomationImport(queueItem.contract_type);
 
             if (importId) {
+              // Note: brokerOtrp is already in pence from the extension
               await sql`
                 INSERT INTO provider_rates (
                   cap_code,
@@ -483,9 +484,8 @@ export async function PATCH(req: NextRequest) {
                   annual_mileage,
                   payment_plan,
                   total_rental,
-                  p11d,
-                  created_at,
-                  updated_at
+                  otr_price,
+                  created_at
                 ) VALUES (
                   ${queueItem.cap_code},
                   ${queueItem.vehicle_id},
@@ -499,8 +499,7 @@ export async function PATCH(req: NextRequest) {
                   ${queueItem.mileage},
                   ${paymentPlan},
                   ${monthlyRentalPence},
-                  ${otrpPence},
-                  NOW(),
+                  ${result.brokerOtrp || null},
                   NOW()
                 )
               `;

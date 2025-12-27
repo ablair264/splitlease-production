@@ -582,6 +582,7 @@ async function runQuote({ capCode, term, mileage, contractType, companyName = 'Q
     // Store pricing from Recalculate before Save overwrites it
     const pricingData = lastQuoteResponse ? {
       summary: lastQuoteResponse.summary,
+      assets: lastQuoteResponse.assets, // Needed for OTR price (assets[0].summary.supplierTotal.gross)
       p11d: lastQuoteResponse.summary?.assetLines?.[0]?.p11d
     } : null;
     console.log('[Drivalia] Stored pricing data before save:', !!pricingData);
@@ -688,7 +689,7 @@ async function extractQuoteResult(storedPricingData = null) {
       console.log('[Drivalia] Using summary from lastQuoteResponse');
     } else {
       console.error('[Drivalia] No pricing data available!');
-      return { quoteId: null, monthlyRental: null, initialRental: null, p11d: null, co2: null, basicPrice: null };
+      return { quoteId: null, monthlyRental: null, initialRental: null, p11d: null, co2: null, basicPrice: null, otrPrice: null };
     }
 
     const assetLines = summary.assetLines || [];
@@ -704,7 +705,15 @@ async function extractQuoteResult(storedPricingData = null) {
     // Get basic vehicle price from subject
     const basicPrice = assetLine.subject?.price ?? null;
 
-    console.log('[Drivalia] Additional data - CO2:', co2, 'Basic Price:', basicPrice);
+    // Get OTR price (On The Road) from assets[0].summary.supplierTotal.gross
+    // This is different from summary.assetLines - it's on the root assets array
+    let otrPrice = null;
+    const assets = storedPricingData?.assets || lastQuoteResponse?.assets || lastQuoteResponse?._pricingData?.assets;
+    if (assets?.[0]?.summary?.supplierTotal?.gross) {
+      otrPrice = assets[0].summary.supplierTotal.gross;
+    }
+
+    console.log('[Drivalia] Additional data - CO2:', co2, 'Basic Price:', basicPrice, 'OTR:', otrPrice);
 
     // Get initial payment (first in schedule, headline: false)
     const initialPayment = schedule[0] || {};
@@ -738,7 +747,8 @@ async function extractQuoteResult(storedPricingData = null) {
       initialRentalIncVat: initialRentalIncVat,
       p11d: p11d,
       co2: co2,
-      basicPrice: basicPrice
+      basicPrice: basicPrice,
+      otrPrice: otrPrice
     };
 
     console.log('[Drivalia] Extracted result:', result);
@@ -749,7 +759,7 @@ async function extractQuoteResult(storedPricingData = null) {
     return result;
   } catch (e) {
     console.error('[Drivalia] Error parsing response:', e);
-    return { quoteId: null, monthlyRental: null, initialRental: null, p11d: null, co2: null, basicPrice: null };
+    return { quoteId: null, monthlyRental: null, initialRental: null, p11d: null, co2: null, basicPrice: null, otrPrice: null };
   }
 }
 

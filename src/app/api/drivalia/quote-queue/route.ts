@@ -92,6 +92,7 @@ type QueueItemResult = {
   p11d?: number;
   co2?: number;
   basicPrice?: number;
+  otrPrice?: number;
   fuelType?: string;
 };
 
@@ -347,6 +348,9 @@ export async function PATCH(req: NextRequest) {
       const basicPricePence = result.basicPrice
         ? Math.round(result.basicPrice * 100)
         : null;
+      const otrPricePence = result.otrPrice
+        ? Math.round(result.otrPrice * 100)
+        : null;
 
       if (vehicleId) {
         await sql`
@@ -440,6 +444,7 @@ export async function PATCH(req: NextRequest) {
                 p11d = ${p11dPence},
                 co2_gkm = ${co2Gkm},
                 basic_list_price = ${basicPricePence},
+                otr_price = ${otrPricePence},
                 score = ${scoreResult.score},
                 score_breakdown = ${scoreResult.breakdown ? JSON.stringify(scoreResult.breakdown) : null},
                 raw_data = ${rawData ? JSON.stringify(rawData) : null}
@@ -480,6 +485,7 @@ export async function PATCH(req: NextRequest) {
                   p11d,
                   co2_gkm,
                   basic_list_price,
+                  otr_price,
                   score,
                   score_breakdown,
                   raw_data,
@@ -500,6 +506,7 @@ export async function PATCH(req: NextRequest) {
                   ${p11dPence},
                   ${co2Gkm},
                   ${basicPricePence},
+                  ${otrPricePence},
                   ${scoreResult.score},
                   ${scoreResult.breakdown ? JSON.stringify(scoreResult.breakdown) : null},
                   ${rawData ? JSON.stringify(rawData) : null},

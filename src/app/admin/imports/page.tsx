@@ -129,7 +129,34 @@ function StatusBadge({ status, hasErrors }: { status: string; hasErrors: boolean
   );
 }
 
-// Smart Import Modal Component
+// Analysis result types for smart import
+interface AnalysisResult {
+  format: "tabular" | "matrix" | "unknown";
+  confidence: number;
+  reason: string;
+  sheets: Array<{
+    name: string;
+    format: string;
+    vehicleInfo?: {
+      manufacturer?: string;
+      variant?: string;
+      capCode?: string;
+    };
+  }>;
+  preview: Array<{
+    manufacturer: string;
+    model: string;
+    variant?: string;
+    term: number;
+    annualMileage: number;
+    paymentProfile: string;
+    monthlyRental: number;
+    isMaintained: boolean;
+    contractType: string;
+  }>;
+}
+
+// Smart Import Modal Component with format detection
 function SmartImportModal({
   isOpen,
   onClose,
@@ -140,16 +167,30 @@ function SmartImportModal({
   onImportComplete?: () => void;
 }) {
   const [file, setFile] = useState<File | null>(null);
+  const [providerCode, setProviderCode] = useState("");
   const [contractType, setContractType] = useState("");
-  const [isExtracting, setIsExtracting] = useState(false);
-  const [isUploading, setIsUploading] = useState(false);
-  const [headers, setHeaders] = useState<string[]>([]);
-  const [sampleRows, setSampleRows] = useState<Record<string, string>[]>([]);
-  const [showMapping, setShowMapping] = useState(false);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
+  const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<ImportResult | null>(null);
   const [fileContent, setFileContent] = useState<string>("");
+  const [step, setStep] = useState<"upload" | "preview" | "mapping" | "result">("upload");
+  const [headers, setHeaders] = useState<string[]>([]);
+  const [sampleRows, setSampleRows] = useState<Record<string, string>[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const PROVIDERS = [
+    { code: "ald", name: "ALD Automotive" },
+    { code: "drivalia", name: "Drivalia" },
+    { code: "lex", name: "Lex Autolease" },
+    { code: "ogilvie", name: "Ogilvie Fleet" },
+    { code: "venus", name: "Venus Fleet" },
+    { code: "arval", name: "Arval" },
+    { code: "zenith", name: "Zenith" },
+    { code: "dealer", name: "Dealer Quote" },
+    { code: "other", name: "Other" },
+  ];
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
@@ -164,48 +205,116 @@ function SmartImportModal({
     setFile(selectedFile);
     setError(null);
     setResult(null);
+    setAnalysisResult(null);
 
-    // Read file content
-    const isXLSX = fileName.endsWith(".xlsx") || fileName.endsWith(".xls");
-    let fileContentStr: string;
+    // Read file content as base64
+    const arrayBuffer = await selectedFile.arrayBuffer();
+    const base64 = btoa(
+      new Uint8Array(arrayBuffer).reduce((data, byte) => data + String.fromCharCode(byte), "")
+    );
+    setFileContent(base64);
 
-    if (isXLSX) {
-      const arrayBuffer = await selectedFile.arrayBuffer();
-      fileContentStr = btoa(
-        new Uint8Array(arrayBuffer).reduce((data, byte) => data + String.fromCharCode(byte), "")
-      );
-    } else {
-      fileContentStr = await selectedFile.text();
-    }
-
-    setFileContent(fileContentStr);
-
-    // Extract headers
-    setIsExtracting(true);
+    // Analyze file using smart import API
+    setIsAnalyzing(true);
     try {
-      const apiBase = getApiBaseUrl();
-      const response = await fetch(`${apiBase}/api/admin/providers/extract-headers`, {
+      const response = await fetch("/api/smart-import", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          fileContent: fileContentStr,
           fileName: selectedFile.name,
-          isBase64: isXLSX,
+          fileContent: base64,
+          action: "analyze",
         }),
       });
 
+      const data = await response.json();
+
       if (!response.ok) {
-        throw new Error("Failed to extract headers");
+        throw new Error(data.error || "Failed to analyze file");
       }
 
-      const data = await response.json();
-      setHeaders(data.headers);
-      setSampleRows(data.sampleRows);
-      setShowMapping(true);
+      setAnalysisResult(data);
+
+      if (data.format === "matrix") {
+        // For matrix format, show preview directly
+        setStep("preview");
+      } else if (data.format === "tabular") {
+        // For tabular format, extract headers for column mapping
+        const apiBase = getApiBaseUrl();
+        const headersResponse = await fetch(`${apiBase}/api/admin/providers/extract-headers`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            fileContent: base64,
+            fileName: selectedFile.name,
+            isBase64: true,
+          }),
+        });
+
+        if (headersResponse.ok) {
+          const headersData = await headersResponse.json();
+          setHeaders(headersData.headers);
+          setSampleRows(headersData.sampleRows);
+          setStep("mapping");
+        } else {
+          // Fallback to preview if header extraction fails
+          setStep("preview");
+        }
+      } else {
+        setError("Could not detect file format. Please ensure the file has recognizable headers or matrix structure.");
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to extract headers");
+      setError(err instanceof Error ? err.message : "Failed to analyze file");
     } finally {
-      setIsExtracting(false);
+      setIsAnalyzing(false);
+    }
+  };
+
+  const handleImport = async () => {
+    if (!file || !providerCode) {
+      setError("Please select a provider");
+      return;
+    }
+
+    setIsImporting(true);
+    setError(null);
+
+    try {
+      const response = await fetch("/api/smart-import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fileName: file.name,
+          fileContent,
+          providerCode,
+          contractType: contractType || undefined,
+          action: "import",
+          dryRun: false,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Import failed");
+      }
+
+      setResult({
+        success: data.success,
+        stats: {
+          totalRows: data.totalRates || 0,
+          successRows: data.successRates || 0,
+          errorRows: data.errorRates || 0,
+        },
+        errors: data.errors,
+      });
+
+      setStep("result");
+      onImportComplete?.();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Import failed");
+    } finally {
+      setIsImporting(false);
     }
   };
 
@@ -214,18 +323,15 @@ function SmartImportModal({
     providerName: string,
     saveConfig: boolean
   ) => {
-    if (!file || !contractType) {
-      setError("Please select a contract type");
-      return;
-    }
+    if (!file) return;
 
-    setShowMapping(false);
-    setIsUploading(true);
+    setStep("upload");
+    setIsImporting(true);
     setError(null);
 
     try {
       const apiBase = getApiBaseUrl();
-      const providerCode = providerName.toLowerCase().replace(/[^a-z0-9]/g, "_");
+      const mappedProviderCode = providerName.toLowerCase().replace(/[^a-z0-9]/g, "_");
 
       // Save provider configuration if requested
       if (saveConfig) {
@@ -246,9 +352,9 @@ function SmartImportModal({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           fileName: file.name,
-          contractType,
+          contractType: contractType || "CH",
           fileContent,
-          providerCode,
+          providerCode: mappedProviderCode,
           columnMappings: mappings,
         }),
       });
@@ -270,23 +376,26 @@ function SmartImportModal({
         errors: data.errors,
       });
 
+      setStep("result");
       onImportComplete?.();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Upload failed");
     } finally {
-      setIsUploading(false);
+      setIsImporting(false);
     }
   };
 
   const handleReset = () => {
     setFile(null);
+    setProviderCode("");
     setContractType("");
     setHeaders([]);
     setSampleRows([]);
-    setShowMapping(false);
     setError(null);
     setResult(null);
     setFileContent("");
+    setAnalysisResult(null);
+    setStep("upload");
   };
 
   const handleClose = () => {
@@ -302,11 +411,11 @@ function SmartImportModal({
         {/* Backdrop */}
         <div
           className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-          onClick={isUploading ? undefined : handleClose}
+          onClick={isImporting ? undefined : handleClose}
         />
 
         {/* Modal */}
-        <div className="relative bg-[#161c24] rounded-xl border border-gray-800 w-full max-w-lg shadow-2xl">
+        <div className="relative bg-[#161c24] rounded-xl border border-gray-800 w-full max-w-2xl shadow-2xl max-h-[90vh] overflow-hidden flex flex-col">
           {/* Header */}
           <div className="flex items-center justify-between px-6 py-4 border-b border-gray-800">
             <div className="flex items-center gap-3">
@@ -318,10 +427,15 @@ function SmartImportModal({
               </div>
               <div>
                 <h2 className="text-lg font-semibold text-white">Smart Import</h2>
-                <p className="text-sm text-gray-500">AI-powered column mapping</p>
+                <p className="text-sm text-gray-500">
+                  {step === "upload" && "Auto-detects tabular and matrix formats"}
+                  {step === "preview" && analysisResult && `Detected ${analysisResult.format} format`}
+                  {step === "mapping" && "Map columns to fields"}
+                  {step === "result" && "Import complete"}
+                </p>
               </div>
             </div>
-            {!isUploading && (
+            {!isImporting && (
               <button
                 onClick={handleClose}
                 className="p-2 hover:bg-white/10 rounded-lg transition-colors"
@@ -332,26 +446,43 @@ function SmartImportModal({
           </div>
 
           {/* Content */}
-          <div className="p-6">
-            {!result?.success ? (
+          <div className="p-6 overflow-y-auto flex-1">
+            {step === "upload" && (
               <>
                 {/* Description */}
                 <div className="p-4 rounded-lg bg-gradient-to-r from-purple-500/10 to-indigo-500/10 border border-purple-500/20 mb-6">
                   <p className="text-sm text-white/70">
-                    Upload any ratebook file and our AI will automatically detect column mappings.
-                    Works with any provider&apos;s format.
+                    Upload any ratebook file. Smart Import will automatically detect if it&apos;s a tabular format
+                    (one rate per row) or matrix format (payment profiles × mileage grid).
                   </p>
+                </div>
+
+                {/* Provider Select */}
+                <div className="mb-4">
+                  <label className="block text-sm text-white/60 mb-1.5">Provider</label>
+                  <select
+                    value={providerCode}
+                    onChange={(e) => setProviderCode(e.target.value)}
+                    className="w-full px-3 py-2.5 rounded-lg text-white text-sm bg-[#1a1f2a] border border-gray-700 focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+                  >
+                    <option value="">Select provider...</option>
+                    {PROVIDERS.map((p) => (
+                      <option key={p.code} value={p.code}>
+                        {p.name}
+                      </option>
+                    ))}
+                  </select>
                 </div>
 
                 {/* Contract Type Select */}
                 <div className="mb-4">
-                  <label className="block text-sm text-white/60 mb-1.5">Contract Type</label>
+                  <label className="block text-sm text-white/60 mb-1.5">Contract Type (optional)</label>
                   <select
                     value={contractType}
                     onChange={(e) => setContractType(e.target.value)}
                     className="w-full px-3 py-2.5 rounded-lg text-white text-sm bg-[#1a1f2a] border border-gray-700 focus:outline-none focus:ring-2 focus:ring-purple-500/50"
                   >
-                    <option value="">Select contract type...</option>
+                    <option value="">Auto-detect from file...</option>
                     {CONTRACT_TYPES.map((ct) => (
                       <option key={ct.value} value={ct.value}>
                         {ct.label}
@@ -373,7 +504,7 @@ function SmartImportModal({
                       accept=".csv,.xlsx,.xls"
                       onChange={handleFileChange}
                       className="hidden"
-                      disabled={isExtracting || isUploading}
+                      disabled={isAnalyzing || isImporting}
                     />
                     <div className="px-4 py-8 text-center">
                       {file ? (
@@ -381,7 +512,7 @@ function SmartImportModal({
                           <FileSpreadsheet className="w-5 h-5" />
                           <span className="text-sm">{file.name}</span>
                         </div>
-                      ) : isExtracting ? (
+                      ) : isAnalyzing ? (
                         <div className="flex items-center justify-center gap-2 text-purple-400">
                           <Loader2 className="w-5 h-5 animate-spin" />
                           <span className="text-sm">Analyzing file...</span>
@@ -403,25 +534,155 @@ function SmartImportModal({
                     {error}
                   </div>
                 )}
+              </>
+            )}
 
-                {/* Status */}
-                {isUploading && (
-                  <div className="mt-4 flex items-center justify-center gap-2 py-4 text-purple-400">
-                    <Loader2 className="w-5 h-5 animate-spin" />
-                    <span className="text-sm">Importing ratebook...</span>
+            {step === "preview" && analysisResult && (
+              <>
+                {/* Format Detection Badge */}
+                <div className="flex items-center gap-3 mb-4">
+                  <span className={cn(
+                    "px-3 py-1 rounded-full text-xs font-medium",
+                    analysisResult.format === "matrix"
+                      ? "bg-purple-500/20 text-purple-400 border border-purple-500/30"
+                      : "bg-blue-500/20 text-blue-400 border border-blue-500/30"
+                  )}>
+                    {analysisResult.format === "matrix" ? "Matrix Format" : "Tabular Format"}
+                  </span>
+                  <span className="text-xs text-white/40">
+                    {analysisResult.confidence}% confidence
+                  </span>
+                </div>
+
+                {/* Sheets Info */}
+                {analysisResult.sheets.length > 0 && (
+                  <div className="mb-4 p-3 rounded-lg bg-white/5 border border-white/10">
+                    <p className="text-xs text-white/40 mb-2">Detected Sheets:</p>
+                    <div className="flex flex-wrap gap-2">
+                      {analysisResult.sheets.map((sheet, i) => (
+                        <span key={i} className="px-2 py-1 rounded bg-white/10 text-xs text-white/70">
+                          {sheet.name}
+                          {sheet.vehicleInfo?.manufacturer && ` (${sheet.vehicleInfo.manufacturer})`}
+                        </span>
+                      ))}
+                    </div>
                   </div>
                 )}
+
+                {/* Preview Table */}
+                <div className="mb-4">
+                  <p className="text-sm text-white/60 mb-2">
+                    Preview ({analysisResult.preview.length} rates detected)
+                  </p>
+                  <div className="overflow-x-auto rounded-lg border border-white/10">
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="bg-white/5">
+                          <th className="px-3 py-2 text-left text-white/50">Vehicle</th>
+                          <th className="px-3 py-2 text-left text-white/50">Term</th>
+                          <th className="px-3 py-2 text-left text-white/50">Mileage</th>
+                          <th className="px-3 py-2 text-left text-white/50">Profile</th>
+                          <th className="px-3 py-2 text-right text-white/50">Monthly</th>
+                          <th className="px-3 py-2 text-center text-white/50">Type</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-white/5">
+                        {analysisResult.preview.slice(0, 10).map((rate, i) => (
+                          <tr key={i} className="hover:bg-white/5">
+                            <td className="px-3 py-2 text-white/80">
+                              {rate.manufacturer} {rate.model}
+                              {rate.variant && <span className="text-white/40 ml-1">{rate.variant}</span>}
+                            </td>
+                            <td className="px-3 py-2 text-white/60">{rate.term}m</td>
+                            <td className="px-3 py-2 text-white/60">{(rate.annualMileage / 1000).toFixed(0)}k</td>
+                            <td className="px-3 py-2 text-white/60">{rate.paymentProfile}</td>
+                            <td className="px-3 py-2 text-right text-[#79d5e9] font-medium">
+                              £{(rate.monthlyRental / 100).toFixed(2)}
+                            </td>
+                            <td className="px-3 py-2 text-center">
+                              <span className={cn(
+                                "px-1.5 py-0.5 rounded text-[10px]",
+                                rate.isMaintained
+                                  ? "bg-green-500/20 text-green-400"
+                                  : "bg-gray-500/20 text-gray-400"
+                              )}>
+                                {rate.contractType}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  {analysisResult.preview.length > 10 && (
+                    <p className="text-xs text-white/40 mt-2 text-center">
+                      + {analysisResult.preview.length - 10} more rates
+                    </p>
+                  )}
+                </div>
+
+                {/* Error */}
+                {error && (
+                  <div className="mb-4 px-4 py-3 rounded-lg text-sm text-red-400 flex items-center gap-2 bg-red-500/10">
+                    <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                    {error}
+                  </div>
+                )}
+
+                {/* Actions */}
+                <div className="flex justify-end gap-3 pt-4 border-t border-white/10">
+                  <button
+                    onClick={handleReset}
+                    disabled={isImporting}
+                    className="px-4 py-2 rounded-lg text-sm font-medium text-white/70 hover:text-white hover:bg-white/10 transition-colors"
+                  >
+                    Back
+                  </button>
+                  <button
+                    onClick={handleImport}
+                    disabled={isImporting || !providerCode}
+                    className="px-6 py-2 rounded-lg text-sm font-medium text-white flex items-center gap-2 transition-all disabled:opacity-50"
+                    style={{ background: "linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%)" }}
+                  >
+                    {isImporting ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Importing...
+                      </>
+                    ) : (
+                      <>
+                        <Upload className="w-4 h-4" />
+                        Import {analysisResult.preview.length} Rates
+                      </>
+                    )}
+                  </button>
+                </div>
               </>
-            ) : (
-              /* Result Display */
+            )}
+
+            {step === "result" && result && (
               <div className="space-y-6">
                 <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 rounded-xl bg-green-500/20 flex items-center justify-center">
-                    <CheckCircle2 className="w-6 h-6 text-green-400" />
+                  <div className={cn(
+                    "w-12 h-12 rounded-xl flex items-center justify-center",
+                    result.success ? "bg-green-500/20" : "bg-red-500/20"
+                  )}>
+                    {result.success ? (
+                      <CheckCircle2 className="w-6 h-6 text-green-400" />
+                    ) : (
+                      <AlertCircle className="w-6 h-6 text-red-400" />
+                    )}
                   </div>
                   <div>
-                    <h2 className="text-lg font-medium text-green-400">Import Successful</h2>
-                    <p className="text-sm text-white/60">Ratebook has been imported</p>
+                    <h2 className={cn(
+                      "text-lg font-medium",
+                      result.success ? "text-green-400" : "text-red-400"
+                    )}>
+                      {result.success ? "Import Successful" : "Import Failed"}
+                    </h2>
+                    <p className="text-sm text-white/60">
+                      {result.success ? "Ratebook has been imported" : "There were errors during import"}
+                    </p>
                   </div>
                 </div>
 
@@ -431,7 +692,7 @@ function SmartImportModal({
                       <p className="text-2xl font-bold text-white">
                         {result.stats.totalRows.toLocaleString()}
                       </p>
-                      <p className="text-xs text-white/50 mt-1">Total Rows</p>
+                      <p className="text-xs text-white/50 mt-1">Total Rates</p>
                     </div>
                     <div className="p-4 rounded-lg bg-white/5 border border-white/10 text-center">
                       <p className="text-2xl font-bold text-green-400">
@@ -443,6 +704,17 @@ function SmartImportModal({
                       <p className="text-2xl font-bold text-red-400">{result.stats.errorRows}</p>
                       <p className="text-xs text-white/50 mt-1">Errors</p>
                     </div>
+                  </div>
+                )}
+
+                {result.errors && result.errors.length > 0 && (
+                  <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20">
+                    <p className="text-xs text-red-400 font-medium mb-2">Errors:</p>
+                    <ul className="text-xs text-red-400/70 space-y-1">
+                      {result.errors.slice(0, 5).map((err, i) => (
+                        <li key={i}>• {err}</li>
+                      ))}
+                    </ul>
                   </div>
                 )}
 
@@ -468,10 +740,10 @@ function SmartImportModal({
         </div>
       </div>
 
-      {/* Column Mapping Modal */}
+      {/* Column Mapping Modal for tabular files */}
       <ColumnMappingModal
-        isOpen={showMapping}
-        onClose={() => setShowMapping(false)}
+        isOpen={step === "mapping"}
+        onClose={() => setStep("upload")}
         onConfirm={handleMappingConfirm}
         fileName={file?.name || ""}
         headers={headers}

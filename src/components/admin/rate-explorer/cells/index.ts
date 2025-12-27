@@ -5,3 +5,4 @@ export { StrengthIndicator } from "./StrengthIndicator";
 export { IntegrityBadge } from "./IntegrityBadge";
 export { BestFunderBadge } from "./BestFunderBadge";
 export { FuelTypeBadge } from "./FuelTypeBadge";
+export { OtrOpportunityBadge } from "./OtrOpportunityBadge";

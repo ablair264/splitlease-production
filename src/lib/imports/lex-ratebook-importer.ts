@@ -248,6 +248,7 @@ export async function importLexRatebook(options: LexImportOptions): Promise<LexI
           nonRecoverableVat: toPence(row.Non_Recoverable_VAT),
           co2Gkm: parseInt2(row.CO2_g_per_km),
           p11d: toPence(row.P11D),
+          basicListPrice: toPence(row.Basic_List_Price),
           fuelType: row.Fuel_Type || null,
           transmission: row.TRANSMISSION || null,
           bodyStyle: row.Body_Style || null,

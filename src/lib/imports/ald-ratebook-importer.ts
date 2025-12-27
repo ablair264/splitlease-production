@@ -303,6 +303,8 @@ export async function importALDRatebook(options: ALDImportOptions): Promise<ALDI
           insuranceGroup: String(row["INSURANCE GROUP"] || ""),
           euroRating: String(row["EURO CLASSIFICATION"] || ""),
           rdeCertificationLevel: null,
+          otrPrice: toPence(row["OTR"]),
+          basicListPrice: toPence(row["BASIC PRICE"]),
           rawData: {
             winId: row["WIN ID"],
             capId: row["CAP ID"],

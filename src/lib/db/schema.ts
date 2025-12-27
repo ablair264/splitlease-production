@@ -107,12 +107,14 @@ export const leadMessages = pgTable("lead_messages", {
 export const vehicles = pgTable("vehicles", {
   id: uuid("id").primaryKey().defaultRandom(),
   capCode: text("cap_code"),
+  capId: text("cap_id"), // Numeric CAP ID for Fleet Procure lookups
   manufacturer: text("manufacturer").notNull(),
   model: text("model").notNull(),
   variant: text("variant"),
   modelYear: text("model_year"),
   p11d: integer("p11d"),
   otr: integer("otr"),
+  basicListPrice: integer("basic_list_price"), // in pence
   engineSize: integer("engine_size"),
   transmission: text("transmission"),
   doors: integer("doors"),
@@ -820,6 +822,9 @@ export const providerRates = pgTable("provider_rates", {
 
   // Pricing - basic list price (ex-options, ex-VAT)
   basicListPrice: integer("basic_list_price"), // in pence
+
+  // OTR (On The Road) price - full price including VAT, delivery, registration
+  otrPrice: integer("otr_price"), // in pence
 
   // Deal value score (0-100, calculated from cost ratio)
   score: integer("score"),
