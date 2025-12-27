@@ -12,6 +12,10 @@ let lastQuoteResponse = null;
 window.addEventListener('message', (event) => {
   if (event.data?.type === 'DRIVALIA_QUOTE_RESPONSE') {
     lastQuoteResponse = event.data.data;
+    // Store the URL so we can extract quote ID from /quote/{id} pattern
+    if (lastQuoteResponse) {
+      lastQuoteResponse._capturedUrl = event.data.url;
+    }
     console.log('[Drivalia] Stored quote response from interceptor, url:', event.data.url);
     console.log('[Drivalia] Response has keys:', Object.keys(lastQuoteResponse || {}));
     if (lastQuoteResponse?.summary?.assetLines?.[0]) {
@@ -586,24 +590,49 @@ async function runQuote({ capCode, term, mileage, contractType, companyName = 'Q
     const saveQuoteBtn = await waitForElementByText('Save Quote', 'button');
     clickElement(saveQuoteBtn);
 
-    // Wait for save response (contains applicationId)
-    console.log('[Drivalia] Waiting for save response...');
+    // Wait for URL to change to /quoting/{id} or for /quote/{id} response (up to 30 seconds)
+    console.log('[Drivalia] Waiting for save to complete...');
+    let quoteIdFromUrl = null;
+    let quoteIdFromResponse = null;
     let saveWait = 0;
-    while (!lastQuoteResponse && saveWait < 10000) {
-      await sleep(200);
-      saveWait += 200;
-    }
-    console.log('[Drivalia] Save response captured:', !!lastQuoteResponse, 'after', saveWait, 'ms');
 
-    // Merge pricing data with save response
+    while (saveWait < 30000) {
+      // Check URL for quote ID
+      const currentHash = window.location.hash;
+      const urlMatch = currentHash.match(/\/quoting\/(\d+)/);
+      if (urlMatch) {
+        quoteIdFromUrl = urlMatch[1];
+        console.log('[Drivalia] Quote ID found in URL:', quoteIdFromUrl);
+        break;
+      }
+
+      // Check if we got a /quote/{id} response
+      if (lastQuoteResponse && lastQuoteResponse._capturedUrl) {
+        const responseUrlMatch = lastQuoteResponse._capturedUrl.match(/\/quote\/(\d+)/);
+        if (responseUrlMatch) {
+          quoteIdFromResponse = responseUrlMatch[1];
+          console.log('[Drivalia] Quote ID found in response URL:', quoteIdFromResponse);
+          break;
+        }
+      }
+
+      await sleep(500);
+      saveWait += 500;
+    }
+    console.log('[Drivalia] Save wait completed after', saveWait, 'ms - URL ID:', quoteIdFromUrl, 'Response ID:', quoteIdFromResponse);
+
+    // Merge pricing data with any captured response
     if (pricingData && lastQuoteResponse) {
       lastQuoteResponse._pricingData = pricingData;
     }
 
-    // Step 18: Handle DPA Agreement modal if it appears (wait up to 3 seconds)
+    // Use whichever quote ID we found
+    const capturedQuoteId = quoteIdFromUrl || quoteIdFromResponse;
+
+    // Step 18: Handle DPA Agreement modal if it appears (wait up to 5 seconds)
     console.log('[Drivalia] Checking for DPA Agreement modal...');
     let dpaWait = 0;
-    while (dpaWait < 3000) {
+    while (dpaWait < 5000) {
       const dpaAcceptBtn = document.querySelector('button[data-hook="dpaaccept"]');
       if (dpaAcceptBtn) {
         console.log('[Drivalia] DPA Agreement modal found - clicking Accept');
@@ -615,24 +644,13 @@ async function runQuote({ capCode, term, mileage, contractType, companyName = 'Q
       dpaWait += 300;
     }
 
-    // Step 19: Try to get quote ID from URL (page should navigate to /quoting/{id} after save)
-    await sleep(1000); // Wait for navigation
-    let quoteIdFromUrl = null;
-    const currentUrl = window.location.hash;
-    console.log('[Drivalia] Current URL after save:', currentUrl);
-    const urlMatch = currentUrl.match(/\/quoting\/(\d+)/);
-    if (urlMatch) {
-      quoteIdFromUrl = urlMatch[1];
-      console.log('[Drivalia] Quote ID from URL:', quoteIdFromUrl);
-    }
+    // Step 20: Extract results using stored pricing data
+    const result = await extractQuoteResult(pricingData);
 
-    // Step 20: Extract results (pricing came from /calculate/, quote ID from URL or save response)
-    const result = await extractQuoteResult();
-
-    // If we got quote ID from URL but not from response, use the URL one
-    if (quoteIdFromUrl && !result.quoteId) {
-      result.quoteId = quoteIdFromUrl;
-      console.log('[Drivalia] Using quote ID from URL:', quoteIdFromUrl);
+    // Use the quote ID we captured during save wait
+    if (capturedQuoteId && !result.quoteId) {
+      result.quoteId = capturedQuoteId;
+      console.log('[Drivalia] Using captured quote ID:', capturedQuoteId);
     }
     console.log('[Drivalia] Quote completed:', result);
 
@@ -651,104 +669,78 @@ async function runQuote({ capCode, term, mileage, contractType, companyName = 'Q
   }
 }
 
-async function extractQuoteResult() {
-  // Wait for API response to be intercepted
-  let attempts = 0;
-  while (!lastQuoteResponse && attempts < 50) {
-    await sleep(100);
-    attempts++;
-  }
+async function extractQuoteResult(storedPricingData = null) {
+  console.log('[Drivalia] Extracting quote result, storedPricingData:', !!storedPricingData);
 
-  if (lastQuoteResponse) {
-    console.log('[Drivalia] Extracting from API response');
-    console.log('[Drivalia] Response keys:', Object.keys(lastQuoteResponse));
+  try {
+    // Get pricing from stored data (passed from before save)
+    let summary, p11d;
+    if (storedPricingData?.summary) {
+      summary = storedPricingData.summary;
+      p11d = storedPricingData.p11d;
+      console.log('[Drivalia] Using stored pricing data');
+    } else if (lastQuoteResponse?._pricingData?.summary) {
+      summary = lastQuoteResponse._pricingData.summary;
+      p11d = lastQuoteResponse._pricingData.p11d;
+      console.log('[Drivalia] Using _pricingData from response');
+    } else if (lastQuoteResponse?.summary) {
+      summary = lastQuoteResponse.summary;
+      console.log('[Drivalia] Using summary from lastQuoteResponse');
+    } else {
+      console.error('[Drivalia] No pricing data available!');
+      return { quoteId: null, monthlyRental: null, initialRental: null, p11d: null };
+    }
 
-    try {
-      // The save response structure:
-      // - assets[0].applicationId - Quote ID
-      // - _pricingData.summary.assetLines[0] - Pricing from /calculate/ response (we stored this before save)
+    const assetLines = summary.assetLines || [];
+    const assetLine = assetLines[0] || {};
+    const schedule = assetLine.schedule || [];
 
-      // Get quote ID from save response
-      const assets = lastQuoteResponse.assets || [];
-      let quoteNumber = assets[0]?.applicationId?.toString() || null;
-      console.log('[Drivalia] Quote ID from save response:', quoteNumber);
+    // Get P11D from asset line
+    p11d = p11d || assetLine.p11d || null;
 
-      // If no applicationId, try to get from current URL after save
-      if (!quoteNumber && window.location.hash.includes('/quoting/')) {
-        const match = window.location.hash.match(/\/quoting\/(\d+)/);
-        if (match) {
-          quoteNumber = match[1];
-          console.log('[Drivalia] Quote ID from URL:', quoteNumber);
-        }
+    // Get initial payment (first in schedule, headline: false)
+    const initialPayment = schedule[0] || {};
+    const initialRentalExVat = initialPayment.netValue || null;
+    const initialRentalIncVat = initialPayment.value || null;
+
+    // Get monthly payment (second in schedule, headline: true)
+    const monthlyPayment = schedule[1] || {};
+    const monthlyRentalExVat = monthlyPayment.netValue || null;
+    const monthlyRentalIncVat = monthlyPayment.value || null;
+
+    // Try to get quote ID from response URL or assets
+    let quoteNumber = null;
+    if (lastQuoteResponse?._capturedUrl) {
+      const urlMatch = lastQuoteResponse._capturedUrl.match(/\/quote\/(\d+)/);
+      if (urlMatch) {
+        quoteNumber = urlMatch[1];
+        console.log('[Drivalia] Quote ID from response URL:', quoteNumber);
       }
-
-      // Get pricing from stored data (captured before save) or current response
-      const pricingData = lastQuoteResponse._pricingData || lastQuoteResponse;
-      const summary = pricingData.summary || lastQuoteResponse.summary || {};
-      const assetLines = summary.assetLines || [];
-      const assetLine = assetLines[0] || {};
-      const schedule = assetLine.schedule || [];
-
-      // Get P11D from asset line
-      const p11d = assetLine.p11d || pricingData.p11d || null;
-
-      // Get initial payment (first in schedule, headline: false)
-      const initialPayment = schedule[0] || {};
-      const initialRentalExVat = initialPayment.netValue || null;
-      const initialRentalIncVat = initialPayment.value || null;
-
-      // Get monthly payment (second in schedule, headline: true)
-      const monthlyPayment = schedule[1] || {};
-      const monthlyRentalExVat = monthlyPayment.netValue || null;
-      const monthlyRentalIncVat = monthlyPayment.value || null;
-
-      const result = {
-        quoteId: quoteNumber,
-        monthlyRental: monthlyRentalExVat,
-        monthlyRentalIncVat: monthlyRentalIncVat,
-        initialRental: initialRentalExVat,
-        initialRentalIncVat: initialRentalIncVat,
-        p11d: p11d
-      };
-
-      console.log('[Drivalia] Extracted result:', result);
-
-      // Clear stored response
-      lastQuoteResponse = null;
-
-      return result;
-    } catch (e) {
-      console.error('[Drivalia] Error parsing response:', e);
     }
-  }
-
-  console.warn('[Drivalia] No API response intercepted, attempting DOM extraction...');
-
-  // Fallback: Try to get quote ID from URL
-  let quoteId = null;
-  if (window.location.hash.includes('/quoting/')) {
-    const match = window.location.hash.match(/\/quoting\/(\d+)/);
-    if (match) {
-      quoteId = match[1];
+    if (!quoteNumber && lastQuoteResponse?.assets?.[0]?.applicationId) {
+      quoteNumber = lastQuoteResponse.assets[0].applicationId.toString();
+      console.log('[Drivalia] Quote ID from assets:', quoteNumber);
     }
+
+    const result = {
+      quoteId: quoteNumber,
+      monthlyRental: monthlyRentalExVat,
+      monthlyRentalIncVat: monthlyRentalIncVat,
+      initialRental: initialRentalExVat,
+      initialRentalIncVat: initialRentalIncVat,
+      p11d: p11d
+    };
+
+    console.log('[Drivalia] Extracted result:', result);
+
+    // Clear stored response
+    lastQuoteResponse = null;
+
+    return result;
+  } catch (e) {
+    console.error('[Drivalia] Error parsing response:', e);
+    return { quoteId: null, monthlyRental: null, initialRental: null, p11d: null };
   }
-
-  // Fallback to DOM extraction
-  const pageText = document.body.innerText;
-
-  // Try to find monthly rental in the page
-  let monthlyRental = null;
-  const rentalMatch = pageText.match(/Monthly[^£\d]*£?([\d,]+\.?\d*)/i) ||
-                      pageText.match(/Rental[^£\d]*£?([\d,]+\.?\d*)/i);
-  if (rentalMatch) {
-    monthlyRental = parseFloat(rentalMatch[1].replace(/,/g, ''));
-  }
-
-  return {
-    quoteId,
-    monthlyRental,
-    initialRental: null
-  };
 }
 
 console.log('[Drivalia] Content script ready');
