@@ -10,10 +10,9 @@ import {
   Car,
   Play,
   Trash2,
-  Calculator,
   Settings2,
-  X,
 } from "lucide-react";
+import { ExpandableCard } from "@/components/shared/expandable-card";
 
 type Vehicle = {
   id: string;
@@ -44,6 +43,8 @@ const CONTRACT_TYPES = [
   { value: "contract_hire_with_maintenance", label: "CH (With Maint)" },
   { value: "personal_contract_hire", label: "PCH" },
 ];
+
+const ITEMS_PER_PAGE = 20;
 
 // Multi-select chip component
 function ChipSelect<T extends string | number>({
@@ -115,7 +116,6 @@ export function QuoteRunner({ onQuotesComplete }: { onQuotesComplete?: () => voi
   const [searchQuery, setSearchQuery] = useState("");
   const [vehiclesLoading, setVehiclesLoading] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
-  const ITEMS_PER_PAGE = 20;
 
   // Quote configuration - now multi-select
   const [config, setConfig] = useState<QuoteConfig>({
@@ -336,7 +336,7 @@ export function QuoteRunner({ onQuotesComplete }: { onQuotesComplete?: () => voi
         </div>
       </div>
 
-      {/* Quote Configuration - Full Width */}
+      {/* Quote Configuration */}
       <div
         className="rounded-xl border p-5"
         style={{ background: "rgba(26, 31, 42, 0.6)", borderColor: "rgba(255, 255, 255, 0.1)" }}
@@ -398,133 +398,27 @@ export function QuoteRunner({ onQuotesComplete }: { onQuotesComplete?: () => voi
         </div>
       </div>
 
-      {/* Main Content - Two Columns */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Left: Vehicle Picker */}
-        <div
-          className="rounded-xl border p-4"
-          style={{ background: "rgba(26, 31, 42, 0.6)", borderColor: "rgba(255, 255, 255, 0.1)" }}
-        >
-          <h3 className="text-white font-medium mb-4 flex items-center gap-2">
-            <Car className="h-4 w-4 text-[#79d5e9]" />
-            Select Vehicles
-            <span className="text-xs text-white/40 ml-2">
-              {filteredVehicles.length} with Lex codes
-            </span>
-          </h3>
-
-          {/* Filters */}
-          <div className="flex gap-2 mb-4">
-            <select
-              value={selectedMake}
-              onChange={(e) => setSelectedMake(e.target.value)}
-              className="px-3 py-2 rounded-lg text-sm bg-[#1a1f2a] border border-white/10 text-white [&>option]:bg-[#1a1f2a] [&>option]:text-white"
-            >
-              <option value="">All Makes</option>
-              {makes.map((make) => (
-                <option key={make} value={make}>
-                  {make}
-                </option>
-              ))}
-            </select>
-
-            <div className="flex-1 relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-white/40" />
-              <input
-                type="text"
-                placeholder="Search vehicles..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 rounded-lg text-sm bg-white/5 border border-white/10 text-white placeholder:text-white/40"
-              />
-            </div>
+      {/* Selected Vehicles Summary */}
+      <ExpandableCard
+        title={`Selected Vehicles (${selectedVehicles.length})`}
+        icon={<Car className="h-4 w-4" />}
+        defaultExpanded={selectedVehicles.length > 0}
+        accentColor="#79d5e9"
+      >
+        {selectedVehicles.length === 0 ? (
+          <div className="text-center py-8 text-white/40 text-sm">
+            Select vehicles from the table below
           </div>
-
-          {/* Vehicle List */}
-          <div className="max-h-[350px] overflow-y-auto space-y-2">
-            {vehiclesLoading ? (
-              <div className="text-center py-8 text-white/40">
-                <Loader2 className="h-5 w-5 animate-spin mx-auto" />
-              </div>
-            ) : filteredVehicles.length === 0 ? (
-              <div className="text-center py-8 text-white/40 text-sm">
-                No vehicles with Lex codes found
-              </div>
-            ) : (
-              paginatedVehicles.map((vehicle) => {
-                const isSelected = selectedVehicles.some((v) => v.id === vehicle.id);
-                return (
-                  <div
-                    key={vehicle.id}
-                    className={`p-3 rounded-lg border transition-colors cursor-pointer ${
-                      isSelected
-                        ? "bg-[#79d5e9]/10 border-[#79d5e9]/30"
-                        : "bg-white/5 border-white/10 hover:border-white/20"
-                    }`}
-                    onClick={() => toggleVehicle(vehicle)}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <div className="text-sm font-medium text-white">
-                          {vehicle.manufacturer} {vehicle.model}
-                        </div>
-                        <div className="text-xs text-white/50">
-                          {vehicle.variant} • {vehicle.fuel_type} • {vehicle.transmission}
-                        </div>
-                      </div>
-                      {isSelected ? (
-                        <CheckCircle2 className="h-4 w-4 text-[#79d5e9]" />
-                      ) : (
-                        <span className="text-xs text-white/40">Click to add</span>
-                      )}
-                    </div>
-                  </div>
-                );
-              })
-            )}
-          </div>
-
-          {/* Pagination */}
-          {totalPages > 1 && (
-            <div className="flex items-center justify-between mt-4 pt-4 border-t border-white/10">
-              <span className="text-xs text-white/50">
-                {filteredVehicles.length} vehicles
-              </span>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                  disabled={currentPage === 1}
-                  className="px-3 py-1 rounded text-xs bg-white/10 text-white disabled:opacity-30 disabled:cursor-not-allowed hover:bg-white/20"
-                >
-                  Prev
-                </button>
-                <span className="text-xs text-white/70">
-                  {currentPage} / {totalPages}
+        ) : (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between mb-2">
+              <div className="text-sm text-white/60">
+                {totalQuotes.toLocaleString()} total quotes will be generated
+                <span className="text-white/40 ml-2">
+                  ({selectedVehicles.length} x {config.terms.length} x {config.mileages.length} x {config.contractTypes.length})
                 </span>
-                <button
-                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                  disabled={currentPage === totalPages}
-                  className="px-3 py-1 rounded text-xs bg-white/10 text-white disabled:opacity-30 disabled:cursor-not-allowed hover:bg-white/20"
-                >
-                  Next
-                </button>
               </div>
-            </div>
-          )}
-        </div>
-
-        {/* Right: Selected Vehicles & Summary */}
-        <div className="space-y-4">
-          {/* Selected Vehicles */}
-          <div
-            className="rounded-xl border p-4"
-            style={{ background: "rgba(26, 31, 42, 0.6)", borderColor: "rgba(255, 255, 255, 0.1)" }}
-          >
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-white font-medium">
-                Selected Vehicles ({selectedVehicles.length})
-              </h3>
-              {selectedVehicles.length > 0 && !isProcessing && (
+              <div className="flex items-center gap-2">
                 <button
                   onClick={clearAll}
                   className="text-xs text-red-400 hover:text-red-300 flex items-center gap-1"
@@ -532,124 +426,209 @@ export function QuoteRunner({ onQuotesComplete }: { onQuotesComplete?: () => voi
                   <Trash2 className="h-3 w-3" />
                   Clear All
                 </button>
-              )}
-            </div>
-
-            {selectedVehicles.length === 0 ? (
-              <div className="text-center py-8 text-white/40 text-sm">
-                Click vehicles on the left to select them
+                <button
+                  onClick={saveQueueToServer}
+                  disabled={totalQuotes === 0 || isProcessing}
+                  className="px-4 py-2 rounded-lg font-medium text-white flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                  style={{
+                    background: totalQuotes > 0 && !isProcessing
+                      ? "linear-gradient(135deg, #79d5e9 0%, #5bc0d8 100%)"
+                      : "rgba(255,255,255,0.1)",
+                  }}
+                >
+                  {isProcessing ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Sending...
+                    </>
+                  ) : (
+                    <>
+                      <Play className="h-4 w-4" />
+                      Generate Queue
+                    </>
+                  )}
+                </button>
               </div>
-            ) : (
-              <div className="space-y-2 max-h-[200px] overflow-y-auto">
-                {selectedVehicles.map((vehicle) => (
-                  <div
-                    key={vehicle.id}
-                    className="p-2 rounded-lg bg-white/5 border border-white/10 flex items-center gap-2"
-                  >
-                    <div className="flex-1 min-w-0">
-                      <div className="text-sm font-medium text-white truncate">
-                        {vehicle.manufacturer} {vehicle.model}
-                      </div>
-                      <div className="text-xs text-white/50 truncate">
-                        {vehicle.variant}
-                      </div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 max-h-48 overflow-y-auto">
+              {selectedVehicles.map((vehicle) => (
+                <div
+                  key={vehicle.id}
+                  className="px-3 py-2 rounded-lg bg-white/5 border border-white/10 flex items-center justify-between gap-2 group hover:bg-white/10 transition-colors"
+                >
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium text-white truncate">
+                      {vehicle.manufacturer} {vehicle.model}
                     </div>
-                    <button
-                      onClick={() => removeVehicle(vehicle.id)}
-                      className="p-1 rounded hover:bg-white/10 text-white/40 hover:text-white/60"
-                    >
-                      <X className="h-4 w-4" />
-                    </button>
+                    <div className="text-xs text-white/50 truncate">
+                      {vehicle.variant}
+                    </div>
                   </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Quote Summary */}
-          <div
-            className="rounded-xl border p-4"
-            style={{ background: "rgba(26, 31, 42, 0.6)", borderColor: "rgba(255, 255, 255, 0.1)" }}
-          >
-            <h3 className="text-white font-medium mb-4 flex items-center gap-2">
-              <Calculator className="h-4 w-4 text-[#79d5e9]" />
-              Quote Summary
-            </h3>
-
-            <div className="space-y-3 text-sm">
-              <div className="flex justify-between">
-                <span className="text-white/60">Vehicles</span>
-                <span className="text-white font-medium">{selectedVehicles.length}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-white/60">Terms</span>
-                <span className="text-white font-medium">
-                  {config.terms.length > 0 ? config.terms.map(t => `${t}mo`).join(", ") : "None"}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-white/60">Mileages</span>
-                <span className="text-white font-medium">
-                  {config.mileages.length > 0 ? config.mileages.map(m => `${m/1000}k`).join(", ") : "None"}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-white/60">Contracts</span>
-                <span className="text-white font-medium text-right">
-                  {config.contractTypes.length > 0
-                    ? config.contractTypes.map(ct =>
-                        CONTRACT_TYPES.find(c => c.value === ct)?.label || ct
-                      ).join(", ")
-                    : "None"}
-                </span>
-              </div>
-              <div className="border-t border-white/10 pt-3 mt-3">
-                <div className="flex justify-between items-center">
-                  <span className="text-white/60">Total Quotes</span>
-                  <span className="text-xl font-bold text-[#79d5e9]">{totalQuotes}</span>
+                  <button
+                    onClick={() => removeVehicle(vehicle.id)}
+                    className="p-1 rounded hover:bg-red-500/20 text-white/40 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
                 </div>
-                <p className="text-xs text-white/40 mt-1">
-                  {selectedVehicles.length} × {config.terms.length} × {config.mileages.length} × {config.contractTypes.length} combinations
-                </p>
-              </div>
+              ))}
             </div>
-
-            {/* Send Button */}
-            {selectedVehicles.length > 0 && !isProcessing && (
-              <button
-                onClick={saveQueueToServer}
-                disabled={totalQuotes === 0}
-                className="w-full mt-4 px-4 py-3 rounded-lg font-medium text-white flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                style={{
-                  background: totalQuotes > 0
-                    ? "linear-gradient(135deg, #79d5e9 0%, #5bc0d8 100%)"
-                    : "rgba(255,255,255,0.1)",
-                }}
-              >
-                <Play className="h-4 w-4" />
-                Generate {totalQuotes} Quote{totalQuotes !== 1 ? "s" : ""}
-              </button>
-            )}
-
-            {isProcessing && (
-              <div className="mt-4 p-3 rounded-lg bg-[#79d5e9]/10 border border-[#79d5e9]/30">
-                <div className="flex items-center gap-2 text-[#79d5e9]">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  <span className="text-sm">Sending to queue...</span>
-                </div>
-              </div>
-            )}
           </div>
+        )}
+      </ExpandableCard>
 
-          {/* Info */}
-          <div className="p-4 bg-blue-500/10 border border-blue-500/20 rounded-xl">
-            <p className="text-sm text-blue-300">
-              <strong>How it works:</strong> Select vehicles and configure options above.
-              The system generates all term × mileage × contract combinations.
-              Process the queue from the browser extension sidepanel.
-            </p>
-          </div>
+      {/* Filters */}
+      <div className="flex gap-2">
+        <select
+          value={selectedMake}
+          onChange={(e) => setSelectedMake(e.target.value)}
+          className="px-3 py-2 rounded-lg text-sm bg-[#1a1f2a] border border-white/10 text-white [&>option]:bg-[#1a1f2a] [&>option]:text-white"
+        >
+          <option value="">All Makes</option>
+          {makes.map((make) => (
+            <option key={make} value={make}>
+              {make}
+            </option>
+          ))}
+        </select>
+
+        <div className="flex-1 relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-white/40" />
+          <input
+            type="text"
+            placeholder="Search vehicles..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full pl-9 pr-3 py-2 rounded-lg text-sm bg-white/5 border border-white/10 text-white placeholder:text-white/40"
+          />
         </div>
+      </div>
+
+      {/* Vehicle Table */}
+      <div className="rounded-lg border border-white/10 bg-[#1a1f2a]/60 overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-white/10 bg-white/5">
+                <th className="px-4 py-3 text-left text-xs font-medium text-white/60 uppercase tracking-wider w-12">
+                  Select
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-white/60 uppercase tracking-wider">
+                  Make
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-white/60 uppercase tracking-wider">
+                  Model
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-white/60 uppercase tracking-wider">
+                  Variant
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-white/60 uppercase tracking-wider">
+                  Fuel
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-white/60 uppercase tracking-wider">
+                  Trans
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-white/60 uppercase tracking-wider">
+                  Body
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-white/60 uppercase tracking-wider">
+                  CO2
+                </th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-white/5">
+              {vehiclesLoading ? (
+                <tr>
+                  <td colSpan={8} className="px-4 py-12 text-center">
+                    <Loader2 className="h-6 w-6 animate-spin mx-auto text-white/40" />
+                  </td>
+                </tr>
+              ) : filteredVehicles.length === 0 ? (
+                <tr>
+                  <td colSpan={8} className="px-4 py-12 text-center text-sm text-white/40">
+                    No vehicles with Lex codes found
+                  </td>
+                </tr>
+              ) : (
+                paginatedVehicles.map((vehicle) => {
+                  const isSelected = selectedVehicles.some((v) => v.id === vehicle.id);
+                  return (
+                    <tr
+                      key={vehicle.id}
+                      onClick={() => toggleVehicle(vehicle)}
+                      className={`cursor-pointer transition-colors ${
+                        isSelected
+                          ? "bg-[#79d5e9]/10 hover:bg-[#79d5e9]/15"
+                          : "hover:bg-white/5"
+                      }`}
+                    >
+                      <td className="px-4 py-3">
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => toggleVehicle(vehicle)}
+                          onClick={(e) => e.stopPropagation()}
+                          className="rounded border-white/20 bg-white/5 text-[#79d5e9] focus:ring-[#79d5e9] focus:ring-offset-0"
+                        />
+                      </td>
+                      <td className="px-4 py-3 text-sm text-white">
+                        {vehicle.manufacturer}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-white">
+                        {vehicle.model}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-white/70 max-w-xs truncate">
+                        {vehicle.variant}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-white/60">
+                        {vehicle.fuel_type}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-white/60">
+                        {vehicle.transmission}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-white/60">
+                        {vehicle.body_style}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-white/60">
+                        {vehicle.co2}
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Pagination Footer */}
+        {totalPages > 1 && (
+          <div className="px-4 py-3 border-t border-white/10 bg-white/5 flex items-center justify-between">
+            <div className="text-sm text-white/60">
+              Showing {((currentPage - 1) * ITEMS_PER_PAGE) + 1} to{" "}
+              {Math.min(currentPage * ITEMS_PER_PAGE, filteredVehicles.length)} of{" "}
+              {filteredVehicles.length} vehicles
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+                className="px-3 py-1.5 rounded text-sm bg-white/10 text-white disabled:opacity-30 disabled:cursor-not-allowed hover:bg-white/20 transition-colors"
+              >
+                Previous
+              </button>
+              <span className="text-sm text-white/70 px-2">
+                Page {currentPage} of {totalPages}
+              </span>
+              <button
+                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages}
+                className="px-3 py-1.5 rounded text-sm bg-white/10 text-white disabled:opacity-30 disabled:cursor-not-allowed hover:bg-white/20 transition-colors"
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
