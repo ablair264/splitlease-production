@@ -13,7 +13,7 @@
       min-height: 100vh;
       padding: 16px;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: #0f1419;
+      background: linear-gradient(135deg, #0f1419 0%, #1a1f2a 50%, #0f1419 100%);
       color: white;
     }
     h1 {
@@ -295,6 +295,232 @@
     .provider-section.active {
       display: block;
     }
+    /* Vehicle Browser Styles */
+    .vehicle-browser {
+      margin-bottom: 16px;
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 12px;
+      overflow: hidden;
+      background: rgba(26, 31, 42, 0.6);
+    }
+    .vehicle-browser-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 14px;
+      background: rgba(15, 20, 25, 0.6);
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .vehicle-browser-header:hover {
+      background: rgba(15, 20, 25, 0.8);
+    }
+    .vehicle-browser-header h3 {
+      font-size: 13px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: #79d5e9;
+    }
+    .vehicle-browser-header.drivalia h3 {
+      color: #ec4899;
+    }
+    .vehicle-browser-header .toggle {
+      font-size: 10px;
+      color: rgba(255,255,255,0.5);
+      transition: transform 0.2s;
+    }
+    .vehicle-browser-header.open .toggle {
+      transform: rotate(180deg);
+    }
+    .vehicle-browser-content {
+      display: none;
+      padding: 14px;
+      background: rgba(15, 20, 25, 0.4);
+    }
+    .vehicle-browser-content.open {
+      display: block;
+    }
+    .filter-row {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+    .filter-row select, .filter-row input {
+      flex: 1;
+      padding: 8px 10px;
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 8px;
+      background: rgba(15, 20, 25, 0.6);
+      color: white;
+      font-size: 11px;
+      transition: border-color 0.2s;
+    }
+    .filter-row select:focus, .filter-row input:focus {
+      outline: none;
+      border-color: rgba(121, 213, 233, 0.5);
+    }
+    .filter-row.drivalia select:focus, .filter-row.drivalia input:focus {
+      border-color: rgba(236, 72, 153, 0.5);
+    }
+    .filter-row select option {
+      background: #1a1f2a;
+      color: white;
+    }
+    .filter-row input::placeholder {
+      color: rgba(255,255,255,0.4);
+    }
+    .vehicle-list {
+      max-height: 280px;
+      overflow-y: auto;
+      margin: 12px 0;
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 8px;
+      background: rgba(15, 20, 25, 0.4);
+    }
+    .vehicle-list-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 10px 12px;
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .vehicle-list-item:hover {
+      background: rgba(121, 213, 233, 0.05);
+    }
+    .vehicle-list-item.drivalia:hover {
+      background: rgba(236, 72, 153, 0.05);
+    }
+    .vehicle-list-item:last-child {
+      border-bottom: none;
+    }
+    .vehicle-list-item input[type="checkbox"] {
+      margin-top: 3px;
+      accent-color: #79d5e9;
+      width: 14px;
+      height: 14px;
+    }
+    .vehicle-list-item.drivalia input[type="checkbox"] {
+      accent-color: #ec4899;
+    }
+    .vehicle-list-item .vehicle-info {
+      flex: 1;
+      min-width: 0;
+    }
+    .vehicle-list-item .vehicle-name {
+      font-size: 12px;
+      font-weight: 500;
+      color: white;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .vehicle-list-item .vehicle-details {
+      font-size: 10px;
+      color: rgba(255,255,255,0.5);
+      margin-top: 3px;
+    }
+    .vehicle-list-item .vehicle-cap {
+      font-size: 9px;
+      color: rgba(121, 213, 233, 0.7);
+      font-family: monospace;
+      margin-top: 2px;
+    }
+    .vehicle-list-item.drivalia .vehicle-cap {
+      color: rgba(236, 72, 153, 0.7);
+    }
+    .vehicle-list-item .vehicle-price {
+      font-size: 11px;
+      color: #4ade80;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    .vehicle-list-empty {
+      padding: 32px 16px;
+      text-align: center;
+      color: rgba(255,255,255,0.4);
+      font-size: 12px;
+    }
+    .vehicle-list-loading {
+      padding: 32px 16px;
+      text-align: center;
+      color: rgba(255,255,255,0.5);
+      font-size: 12px;
+    }
+    .selection-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 0;
+      font-size: 11px;
+      color: rgba(255,255,255,0.6);
+    }
+    .selection-bar .count {
+      color: #79d5e9;
+      font-weight: 600;
+    }
+    .selection-bar .count.drivalia {
+      color: #ec4899;
+    }
+    .btn-add-queue {
+      width: 100%;
+      padding: 10px;
+      font-size: 12px;
+    }
+    .pagination-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 0;
+      font-size: 11px;
+      color: rgba(255,255,255,0.5);
+    }
+    .pagination-row button {
+      width: auto;
+      padding: 6px 12px;
+      font-size: 11px;
+      margin: 0;
+    }
+    .config-section {
+      padding: 12px;
+      background: rgba(15, 20, 25, 0.4);
+      border-radius: 8px;
+      margin-bottom: 10px;
+      border: 1px solid rgba(255,255,255,0.05);
+    }
+    .config-section label {
+      display: block;
+      font-size: 10px;
+      color: rgba(255,255,255,0.5);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 6px;
+    }
+    .config-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 8px;
+    }
+    .config-item {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .config-item label {
+      font-size: 9px;
+      margin-bottom: 2px;
+    }
+    .config-item select {
+      padding: 6px 8px;
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 6px;
+      background: rgba(15, 20, 25, 0.6);
+      color: white;
+      font-size: 11px;
+    }
   </style>
 </head>
 <body>
@@ -329,6 +555,84 @@
     <button id="testBtn" class="secondary" style="display:none;">
       Test Full Quote (BMW 3 Series)
     </button>
+
+    <!-- Lex Vehicle Browser -->
+    <div class="vehicle-browser" id="lexVehicleBrowser">
+      <div class="vehicle-browser-header" id="lexBrowserHeader">
+        <h3>📋 Select Vehicles</h3>
+        <span class="toggle">▼</span>
+      </div>
+      <div class="vehicle-browser-content" id="lexBrowserContent">
+        <!-- Filters -->
+        <div class="filter-row">
+          <select id="lexFilterManufacturer">
+            <option value="">All Makes</option>
+          </select>
+          <select id="lexFilterFuelType">
+            <option value="">All Fuel</option>
+          </select>
+        </div>
+        <div class="filter-row">
+          <input type="text" id="lexFilterSearch" placeholder="Search vehicles...">
+        </div>
+
+        <!-- Quote Config -->
+        <div class="config-section">
+          <label>Quote Configuration</label>
+          <div class="config-row">
+            <div class="config-item">
+              <label>Term</label>
+              <select id="lexConfigTerm">
+                <option value="24">24 mo</option>
+                <option value="36" selected>36 mo</option>
+                <option value="48">48 mo</option>
+                <option value="60">60 mo</option>
+              </select>
+            </div>
+            <div class="config-item">
+              <label>Mileage</label>
+              <select id="lexConfigMileage">
+                <option value="5000">5,000</option>
+                <option value="8000">8,000</option>
+                <option value="10000" selected>10,000</option>
+                <option value="15000">15,000</option>
+                <option value="20000">20,000</option>
+              </select>
+            </div>
+            <div class="config-item">
+              <label>Contract</label>
+              <select id="lexConfigContract">
+                <option value="CHNM">CH</option>
+                <option value="PCHNM">PCH</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- Vehicle List -->
+        <div class="vehicle-list" id="lexVehicleList">
+          <div class="vehicle-list-loading">Loading vehicles...</div>
+        </div>
+
+        <!-- Pagination -->
+        <div class="pagination-row" id="lexPagination">
+          <button class="secondary" id="lexPrevPage" disabled>← Prev</button>
+          <span id="lexPageInfo">Page 1</span>
+          <button class="secondary" id="lexNextPage">Next →</button>
+        </div>
+
+        <!-- Selection Bar -->
+        <div class="selection-bar">
+          <span><span class="count" id="lexSelectedCount">0</span> vehicles selected</span>
+          <button class="secondary" id="lexSelectAll" style="width:auto;padding:4px 10px;font-size:10px;">Select All</button>
+        </div>
+
+        <!-- Add to Queue Button -->
+        <button id="lexAddToQueueBtn" class="primary btn-add-queue" disabled>
+          Add to Queue
+        </button>
+      </div>
+    </div>
 
     <div id="lexResult" class="result" style="display:none;">
       <div class="label">Monthly Rental</div>
@@ -369,6 +673,84 @@
     <button id="drivaliaCaptureBtn" class="primary drivalia" disabled>
       Checking...
     </button>
+
+    <!-- Drivalia Vehicle Browser -->
+    <div class="vehicle-browser" id="drivaliaVehicleBrowser">
+      <div class="vehicle-browser-header drivalia" id="drivaliaBrowserHeader">
+        <h3>📋 Select Vehicles</h3>
+        <span class="toggle">▼</span>
+      </div>
+      <div class="vehicle-browser-content" id="drivaliaBrowserContent">
+        <!-- Filters -->
+        <div class="filter-row drivalia">
+          <select id="drivaliaFilterManufacturer">
+            <option value="">All Makes</option>
+          </select>
+          <select id="drivaliaFilterFuelType">
+            <option value="">All Fuel</option>
+          </select>
+        </div>
+        <div class="filter-row drivalia">
+          <input type="text" id="drivaliaFilterSearch" placeholder="Search vehicles...">
+        </div>
+
+        <!-- Quote Config -->
+        <div class="config-section">
+          <label>Quote Configuration</label>
+          <div class="config-row">
+            <div class="config-item">
+              <label>Term</label>
+              <select id="drivaliaConfigTerm">
+                <option value="24">24 mo</option>
+                <option value="36" selected>36 mo</option>
+                <option value="48">48 mo</option>
+                <option value="60">60 mo</option>
+              </select>
+            </div>
+            <div class="config-item">
+              <label>Mileage</label>
+              <select id="drivaliaConfigMileage">
+                <option value="5000">5,000</option>
+                <option value="8000">8,000</option>
+                <option value="10000" selected>10,000</option>
+                <option value="15000">15,000</option>
+                <option value="20000">20,000</option>
+              </select>
+            </div>
+            <div class="config-item">
+              <label>Contract</label>
+              <select id="drivaliaConfigContract">
+                <option value="BCH">BCH</option>
+                <option value="PCH">PCH</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- Vehicle List -->
+        <div class="vehicle-list" id="drivaliaVehicleList">
+          <div class="vehicle-list-loading">Loading vehicles...</div>
+        </div>
+
+        <!-- Pagination -->
+        <div class="pagination-row" id="drivaliaPagination">
+          <button class="secondary" id="drivaliaPrevPage" disabled>← Prev</button>
+          <span id="drivaliaPageInfo">Page 1</span>
+          <button class="secondary" id="drivaliaNextPage">Next →</button>
+        </div>
+
+        <!-- Selection Bar -->
+        <div class="selection-bar">
+          <span><span class="count drivalia" id="drivaliaSelectedCount">0</span> vehicles selected</span>
+          <button class="secondary" id="drivaliaSelectAll" style="width:auto;padding:4px 10px;font-size:10px;">Select All</button>
+        </div>
+
+        <!-- Add to Queue Button -->
+        <button id="drivaliaAddToQueueBtn" class="primary drivalia btn-add-queue" disabled>
+          Add to Queue
+        </button>
+      </div>
+    </div>
 
     <div id="drivaliaResult" class="result" style="display:none;">
       <div class="label">Monthly Rental</div>

@@ -7,7 +7,11 @@
   function shouldIntercept(url) {
     if (!url || typeof url !== 'string') return false;
     // Intercept both /calculate/ (for pricing data) and /application/ (for saved quotes)
-    return url.includes('/calculate/') || url.includes('/application/');
+    const shouldCapture = url.includes('/calculate/') || url.includes('/application/') || url.includes('/calculate');
+    if (url.includes('api') || url.includes('calculate') || url.includes('application')) {
+      console.log('[Drivalia MAIN] URL check:', url.substring(0, 100), '-> intercept:', shouldCapture);
+    }
+    return shouldCapture;
   }
 
   // Listen for commands from content script to interact with Angular
@@ -105,14 +109,18 @@
       const url = args[0]?.url || args[0];
 
       if (shouldIntercept(url)) {
+        console.log('[Drivalia MAIN] Intercepting fetch response for:', url);
         response.clone().json().then(data => {
+          console.log('[Drivalia MAIN] Posting fetch response, keys:', Object.keys(data || {}));
           window.postMessage({
             type: 'DRIVALIA_QUOTE_RESPONSE',
             data: data,
             url: url
           }, '*');
-          console.log('[Drivalia] Intercepted fetch response:', url);
-        }).catch(() => {});
+          console.log('[Drivalia MAIN] Posted DRIVALIA_QUOTE_RESPONSE for:', url);
+        }).catch((err) => {
+          console.log('[Drivalia MAIN] Failed to parse fetch response:', err.message);
+        });
       }
 
       return response;
@@ -131,15 +139,19 @@
   XMLHttpRequest.prototype.send = function() {
     this.addEventListener('load', function() {
       if (shouldIntercept(this._drivaliaUrl)) {
+        console.log('[Drivalia MAIN] Intercepting XHR response for:', this._drivaliaUrl);
         try {
           const data = JSON.parse(this.responseText);
+          console.log('[Drivalia MAIN] Posting XHR response, keys:', Object.keys(data || {}));
           window.postMessage({
             type: 'DRIVALIA_QUOTE_RESPONSE',
             data: data,
             url: this._drivaliaUrl
           }, '*');
-          console.log('[Drivalia] Intercepted XHR response:', this._drivaliaUrl);
-        } catch (e) {}
+          console.log('[Drivalia MAIN] Posted DRIVALIA_QUOTE_RESPONSE for:', this._drivaliaUrl);
+        } catch (e) {
+          console.log('[Drivalia MAIN] Failed to parse XHR response:', e.message);
+        }
       }
     });
     return originalSend.apply(this, arguments);

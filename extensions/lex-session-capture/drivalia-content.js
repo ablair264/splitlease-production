@@ -12,7 +12,12 @@ let lastQuoteResponse = null;
 window.addEventListener('message', (event) => {
   if (event.data?.type === 'DRIVALIA_QUOTE_RESPONSE') {
     lastQuoteResponse = event.data.data;
-    console.log('[Drivalia] Stored quote response from interceptor');
+    console.log('[Drivalia] Stored quote response from interceptor, url:', event.data.url);
+    console.log('[Drivalia] Response has keys:', Object.keys(lastQuoteResponse || {}));
+    if (lastQuoteResponse?.summary?.assetLines?.[0]) {
+      const assetLine = lastQuoteResponse.summary.assetLines[0];
+      console.log('[Drivalia] Found assetLine - P11D:', assetLine.p11d, 'schedule length:', assetLine.schedule?.length);
+    }
   }
 });
 
@@ -520,6 +525,7 @@ async function runQuote({ capCode, term, mileage, contractType, companyName = 'Q
 
     // Wait for "Recalculating" to disappear (max 30 seconds)
     console.log('[Drivalia] Waiting for calculation to complete...');
+    lastQuoteResponse = null; // Clear BEFORE recalculate so we capture fresh response
     await sleep(1000); // Initial wait for recalculating to start
     let recalcWait = 0;
     while (recalcWait < 30000) {
@@ -531,16 +537,23 @@ async function runQuote({ capCode, term, mileage, contractType, companyName = 'Q
       await sleep(500);
       recalcWait += 500;
     }
-    await sleep(500); // Extra buffer
+    await sleep(1500); // Extra buffer for API response to be captured
+
+    // Check if we got pricing from the /calculate/ endpoint
+    console.log('[Drivalia] Checking for captured pricing response...');
+    console.log('[Drivalia] lastQuoteResponse set:', !!lastQuoteResponse);
+    if (lastQuoteResponse) {
+      console.log('[Drivalia] Captured response keys:', Object.keys(lastQuoteResponse));
+    }
 
     // Step 17: Click Save Quote (from Playwright: getByRole('button', { name: ' Save Quote' }) - note space)
     console.log('[Drivalia] Saving quote...');
-    lastQuoteResponse = null; // Clear previous response
+    // DON'T clear lastQuoteResponse - we need the pricing from Recalculate!
     const saveQuoteBtn = await waitForElementByText('Save Quote', 'button');
     clickElement(saveQuoteBtn);
-    await sleep(3000); // Wait for save and response
+    await sleep(3000); // Wait for save
 
-    // Step 17: Extract results
+    // Step 18: Extract results (pricing came from /calculate/, quote ID comes from save)
     const result = await extractQuoteResult();
     console.log('[Drivalia] Quote completed:', result);
 

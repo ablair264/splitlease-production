@@ -556,4 +556,552 @@ document.addEventListener('DOMContentLoaded', async () => {
       console.error('Failed to check Drivalia queue:', error);
     }
   }
+
+  // ==================== VEHICLE BROWSER ====================
+
+  // Vehicle browser state
+  const vehicleBrowserState = {
+    lex: {
+      vehicles: [],
+      selected: new Set(),
+      page: 1,
+      totalPages: 1,
+      filters: { manufacturer: '', fuelType: '', search: '' },
+      filterOptions: { manufacturers: [], fuelTypes: [] }
+    },
+    drivalia: {
+      vehicles: [],
+      selected: new Set(),
+      page: 1,
+      totalPages: 1,
+      filters: { manufacturer: '', fuelType: '', search: '' },
+      filterOptions: { manufacturers: [], fuelTypes: [] }
+    }
+  };
+
+  // Vehicle browser elements
+  const lexBrowserHeader = document.getElementById('lexBrowserHeader');
+  const lexBrowserContent = document.getElementById('lexBrowserContent');
+  const lexFilterManufacturer = document.getElementById('lexFilterManufacturer');
+  const lexFilterFuelType = document.getElementById('lexFilterFuelType');
+  const lexFilterSearch = document.getElementById('lexFilterSearch');
+  const lexVehicleList = document.getElementById('lexVehicleList');
+  const lexPageInfo = document.getElementById('lexPageInfo');
+  const lexPrevPage = document.getElementById('lexPrevPage');
+  const lexNextPage = document.getElementById('lexNextPage');
+  const lexSelectedCount = document.getElementById('lexSelectedCount');
+  const lexSelectAll = document.getElementById('lexSelectAll');
+  const lexAddToQueueBtn = document.getElementById('lexAddToQueueBtn');
+  const lexConfigTerm = document.getElementById('lexConfigTerm');
+  const lexConfigMileage = document.getElementById('lexConfigMileage');
+  const lexConfigContract = document.getElementById('lexConfigContract');
+
+  const drivaliaBrowserHeader = document.getElementById('drivaliaBrowserHeader');
+  const drivaliaBrowserContent = document.getElementById('drivaliaBrowserContent');
+  const drivaliaFilterManufacturer = document.getElementById('drivaliaFilterManufacturer');
+  const drivaliaFilterFuelType = document.getElementById('drivaliaFilterFuelType');
+  const drivaliaFilterSearch = document.getElementById('drivaliaFilterSearch');
+  const drivaliaVehicleList = document.getElementById('drivaliaVehicleList');
+  const drivaliaPageInfo = document.getElementById('drivaliaPageInfo');
+  const drivaliaPrevPage = document.getElementById('drivaliaPrevPage');
+  const drivaliaNextPage = document.getElementById('drivaliaNextPage');
+  const drivaliaSelectedCount = document.getElementById('drivaliaSelectedCount');
+  const drivaliaSelectAll = document.getElementById('drivaliaSelectAll');
+  const drivaliaAddToQueueBtn = document.getElementById('drivaliaAddToQueueBtn');
+  const drivaliaConfigTerm = document.getElementById('drivaliaConfigTerm');
+  const drivaliaConfigMileage = document.getElementById('drivaliaConfigMileage');
+  const drivaliaConfigContract = document.getElementById('drivaliaConfigContract');
+
+  // Toggle browser panels
+  lexBrowserHeader?.addEventListener('click', () => {
+    lexBrowserHeader.classList.toggle('open');
+    lexBrowserContent.classList.toggle('open');
+    if (lexBrowserContent.classList.contains('open') && vehicleBrowserState.lex.vehicles.length === 0) {
+      loadFilters('lex');
+      loadVehicles('lex');
+    }
+  });
+
+  drivaliaBrowserHeader?.addEventListener('click', () => {
+    drivaliaBrowserHeader.classList.toggle('open');
+    drivaliaBrowserContent.classList.toggle('open');
+    if (drivaliaBrowserContent.classList.contains('open') && vehicleBrowserState.drivalia.vehicles.length === 0) {
+      loadFilters('drivalia');
+      loadVehicles('drivalia');
+    }
+  });
+
+  // Load filter options
+  async function loadFilters(provider) {
+    try {
+      const response = await fetch(`${API_URL}/api/admin/rates/filters`);
+      const data = await response.json();
+
+      const state = vehicleBrowserState[provider];
+      state.filterOptions = {
+        manufacturers: data.manufacturers || [],
+        fuelTypes: data.fuelTypes || []
+      };
+
+      const manufacturerSelect = provider === 'lex' ? lexFilterManufacturer : drivaliaFilterManufacturer;
+      const fuelTypeSelect = provider === 'lex' ? lexFilterFuelType : drivaliaFilterFuelType;
+
+      // Populate manufacturer dropdown
+      manufacturerSelect.innerHTML = '<option value="">All Makes</option>' +
+        state.filterOptions.manufacturers.map(m => `<option value="${m}">${m}</option>`).join('');
+
+      // Populate fuel type dropdown
+      fuelTypeSelect.innerHTML = '<option value="">All Fuel</option>' +
+        state.filterOptions.fuelTypes.map(f => `<option value="${f}">${f}</option>`).join('');
+
+    } catch (error) {
+      console.error(`Failed to load ${provider} filters:`, error);
+    }
+  }
+
+  // Load vehicles
+  async function loadVehicles(provider) {
+    const state = vehicleBrowserState[provider];
+    const vehicleList = provider === 'lex' ? lexVehicleList : drivaliaVehicleList;
+    const pageInfo = provider === 'lex' ? lexPageInfo : drivaliaPageInfo;
+    const prevBtn = provider === 'lex' ? lexPrevPage : drivaliaPrevPage;
+    const nextBtn = provider === 'lex' ? lexNextPage : drivaliaNextPage;
+
+    vehicleList.innerHTML = '<div class="vehicle-list-loading">Loading vehicles...</div>';
+
+    try {
+      let response, data;
+
+      if (provider === 'lex') {
+        // For Lex, use the vehicles endpoint that returns Lex-specific codes
+        const params = new URLSearchParams({ hasLexCodes: 'true' });
+        if (state.filters.manufacturer) params.set('make', state.filters.manufacturer);
+
+        response = await fetch(`${API_URL}/api/lex-autolease/vehicles?${params}`);
+        data = await response.json();
+
+        // Filter by search client-side (API doesn't support search param)
+        let vehicles = data.vehicles || [];
+        if (state.filters.search) {
+          const query = state.filters.search.toLowerCase();
+          vehicles = vehicles.filter(v =>
+            v.manufacturer?.toLowerCase().includes(query) ||
+            v.model?.toLowerCase().includes(query) ||
+            v.variant?.toLowerCase().includes(query)
+          );
+        }
+        if (state.filters.fuelType) {
+          vehicles = vehicles.filter(v => v.fuelType === state.filters.fuelType);
+        }
+
+        // Paginate client-side
+        const offset = (state.page - 1) * 20;
+        state.totalPages = Math.ceil(vehicles.length / 20);
+        state.vehicles = vehicles.slice(offset, offset + 20);
+        state.allVehicles = vehicles; // Keep all for selection lookup
+
+        // Extract unique makes for filter
+        if (!state.filterOptions.manufacturers.length && data.makes) {
+          state.filterOptions.manufacturers = data.makes;
+          const manufacturerSelect = lexFilterManufacturer;
+          manufacturerSelect.innerHTML = '<option value="">All Makes</option>' +
+            data.makes.map(m => `<option value="${m}">${m}</option>`).join('');
+        }
+
+        // Extract unique fuel types for filter
+        if (!state.filterOptions.fuelTypes.length && data.vehicles) {
+          const fuelTypes = [...new Set(data.vehicles.map(v => v.fuelType).filter(Boolean))];
+          state.filterOptions.fuelTypes = fuelTypes;
+          const fuelTypeSelect = lexFilterFuelType;
+          fuelTypeSelect.innerHTML = '<option value="">All Fuel</option>' +
+            fuelTypes.map(f => `<option value="${f}">${f}</option>`).join('');
+        }
+      } else {
+        // For Drivalia, use the vehicles endpoint with CAP codes (same as admin page)
+        const params = new URLSearchParams({
+          requirePricing: 'false',
+          hasCapCode: 'true',
+          limit: '1000'
+        });
+
+        if (state.filters.manufacturer) params.set('make', state.filters.manufacturer);
+
+        response = await fetch(`${API_URL}/api/vehicles?${params}`);
+        data = await response.json();
+
+        // Filter by fuel type and search client-side
+        let vehicles = (data.vehicles || []).filter(v => v.capCode);
+        if (state.filters.fuelType) {
+          vehicles = vehicles.filter(v => v.fuelType === state.filters.fuelType);
+        }
+        if (state.filters.search) {
+          const query = state.filters.search.toLowerCase();
+          vehicles = vehicles.filter(v =>
+            v.manufacturer?.toLowerCase().includes(query) ||
+            v.model?.toLowerCase().includes(query) ||
+            v.variant?.toLowerCase().includes(query)
+          );
+        }
+
+        // Paginate client-side
+        const offset = (state.page - 1) * 20;
+        state.totalPages = Math.ceil(vehicles.length / 20);
+        state.vehicles = vehicles.slice(offset, offset + 20);
+        state.allVehicles = vehicles; // Keep all for selection lookup
+
+        // Extract unique makes for filter
+        if (!state.filterOptions.manufacturers.length && data.makes) {
+          state.filterOptions.manufacturers = data.makes;
+          const manufacturerSelect = drivaliaFilterManufacturer;
+          manufacturerSelect.innerHTML = '<option value="">All Makes</option>' +
+            data.makes.map(m => `<option value="${m}">${m}</option>`).join('');
+        }
+
+        // Extract unique fuel types for filter
+        if (!state.filterOptions.fuelTypes.length && data.vehicles) {
+          const fuelTypes = [...new Set(data.vehicles.map(v => v.fuelType).filter(Boolean))];
+          state.filterOptions.fuelTypes = fuelTypes;
+          const fuelTypeSelect = drivaliaFilterFuelType;
+          fuelTypeSelect.innerHTML = '<option value="">All Fuel</option>' +
+            fuelTypes.map(f => `<option value="${f}">${f}</option>`).join('');
+        }
+      }
+
+      // Update pagination
+      pageInfo.textContent = `Page ${state.page} of ${state.totalPages || 1}`;
+      prevBtn.disabled = state.page <= 1;
+      nextBtn.disabled = state.page >= state.totalPages;
+
+      // Render vehicles
+      if (state.vehicles.length === 0) {
+        vehicleList.innerHTML = '<div class="vehicle-list-empty">No vehicles found</div>';
+        return;
+      }
+
+      if (provider === 'lex') {
+        // Lex vehicles from /api/lex-autolease/vehicles (camelCase from Drizzle)
+        vehicleList.innerHTML = state.vehicles.map(v => {
+          const isSelected = state.selected.has(v.id);
+          return `
+            <div class="vehicle-list-item" data-id="${v.id}">
+              <input type="checkbox" ${isSelected ? 'checked' : ''} data-id="${v.id}">
+              <div class="vehicle-info">
+                <div class="vehicle-name">${v.manufacturer} ${v.model}</div>
+                <div class="vehicle-details">${v.variant || ''} • ${v.fuelType || ''} • ${v.transmission || ''}</div>
+                <div class="vehicle-cap">Lex: ${v.lexMakeCode}/${v.lexModelCode}/${v.lexVariantCode}</div>
+              </div>
+            </div>
+          `;
+        }).join('');
+
+        // Add click handlers for Lex (using vehicle ID)
+        vehicleList.querySelectorAll('.vehicle-list-item').forEach(item => {
+          const checkbox = item.querySelector('input[type="checkbox"]');
+          const vehicleId = item.dataset.id;
+
+          item.addEventListener('click', (e) => {
+            if (e.target.type !== 'checkbox') {
+              checkbox.checked = !checkbox.checked;
+            }
+            if (checkbox.checked) {
+              state.selected.add(vehicleId);
+            } else {
+              state.selected.delete(vehicleId);
+            }
+            updateSelectionUI(provider);
+          });
+        });
+      } else {
+        // Drivalia uses vehicles endpoint (camelCase)
+        vehicleList.innerHTML = state.vehicles.map(v => {
+          const isSelected = state.selected.has(v.id);
+          return `
+            <div class="vehicle-list-item drivalia" data-id="${v.id}">
+              <input type="checkbox" ${isSelected ? 'checked' : ''} data-id="${v.id}">
+              <div class="vehicle-info">
+                <div class="vehicle-name">${v.manufacturer} ${v.model}</div>
+                <div class="vehicle-details">${v.variant || ''} • ${v.fuelType || ''} • ${v.transmission || ''}</div>
+                <div class="vehicle-cap">CAP: ${v.capCode}</div>
+              </div>
+            </div>
+          `;
+        }).join('');
+
+        // Add click handlers for Drivalia (using vehicle ID)
+        vehicleList.querySelectorAll('.vehicle-list-item').forEach(item => {
+          const checkbox = item.querySelector('input[type="checkbox"]');
+          const vehicleId = item.dataset.id;
+
+          item.addEventListener('click', (e) => {
+            if (e.target.type !== 'checkbox') {
+              checkbox.checked = !checkbox.checked;
+            }
+            if (checkbox.checked) {
+              state.selected.add(vehicleId);
+            } else {
+              state.selected.delete(vehicleId);
+            }
+            updateSelectionUI(provider);
+          });
+        });
+      }
+
+      updateSelectionUI(provider);
+
+    } catch (error) {
+      console.error(`Failed to load ${provider} vehicles:`, error);
+      vehicleList.innerHTML = '<div class="vehicle-list-empty">Failed to load vehicles</div>';
+    }
+  }
+
+  // Update selection UI
+  function updateSelectionUI(provider) {
+    const state = vehicleBrowserState[provider];
+    const countEl = provider === 'lex' ? lexSelectedCount : drivaliaSelectedCount;
+    const addBtn = provider === 'lex' ? lexAddToQueueBtn : drivaliaAddToQueueBtn;
+
+    countEl.textContent = state.selected.size;
+    addBtn.disabled = state.selected.size === 0;
+    addBtn.textContent = state.selected.size > 0
+      ? `Add ${state.selected.size} to Queue`
+      : 'Add to Queue';
+  }
+
+  // Filter event handlers - Lex
+  let lexSearchTimeout;
+  lexFilterManufacturer?.addEventListener('change', () => {
+    vehicleBrowserState.lex.filters.manufacturer = lexFilterManufacturer.value;
+    vehicleBrowserState.lex.page = 1;
+    loadVehicles('lex');
+  });
+
+  lexFilterFuelType?.addEventListener('change', () => {
+    vehicleBrowserState.lex.filters.fuelType = lexFilterFuelType.value;
+    vehicleBrowserState.lex.page = 1;
+    loadVehicles('lex');
+  });
+
+  lexFilterSearch?.addEventListener('input', () => {
+    clearTimeout(lexSearchTimeout);
+    lexSearchTimeout = setTimeout(() => {
+      vehicleBrowserState.lex.filters.search = lexFilterSearch.value;
+      vehicleBrowserState.lex.page = 1;
+      loadVehicles('lex');
+    }, 300);
+  });
+
+  // Filter event handlers - Drivalia
+  let drivaliaSearchTimeout;
+  drivaliaFilterManufacturer?.addEventListener('change', () => {
+    vehicleBrowserState.drivalia.filters.manufacturer = drivaliaFilterManufacturer.value;
+    vehicleBrowserState.drivalia.page = 1;
+    loadVehicles('drivalia');
+  });
+
+  drivaliaFilterFuelType?.addEventListener('change', () => {
+    vehicleBrowserState.drivalia.filters.fuelType = drivaliaFilterFuelType.value;
+    vehicleBrowserState.drivalia.page = 1;
+    loadVehicles('drivalia');
+  });
+
+  drivaliaFilterSearch?.addEventListener('input', () => {
+    clearTimeout(drivaliaSearchTimeout);
+    drivaliaSearchTimeout = setTimeout(() => {
+      vehicleBrowserState.drivalia.filters.search = drivaliaFilterSearch.value;
+      vehicleBrowserState.drivalia.page = 1;
+      loadVehicles('drivalia');
+    }, 300);
+  });
+
+  // Pagination - Lex
+  lexPrevPage?.addEventListener('click', () => {
+    if (vehicleBrowserState.lex.page > 1) {
+      vehicleBrowserState.lex.page--;
+      loadVehicles('lex');
+    }
+  });
+
+  lexNextPage?.addEventListener('click', () => {
+    if (vehicleBrowserState.lex.page < vehicleBrowserState.lex.totalPages) {
+      vehicleBrowserState.lex.page++;
+      loadVehicles('lex');
+    }
+  });
+
+  // Pagination - Drivalia
+  drivaliaPrevPage?.addEventListener('click', () => {
+    if (vehicleBrowserState.drivalia.page > 1) {
+      vehicleBrowserState.drivalia.page--;
+      loadVehicles('drivalia');
+    }
+  });
+
+  drivaliaNextPage?.addEventListener('click', () => {
+    if (vehicleBrowserState.drivalia.page < vehicleBrowserState.drivalia.totalPages) {
+      vehicleBrowserState.drivalia.page++;
+      loadVehicles('drivalia');
+    }
+  });
+
+  // Select All - Lex (uses vehicle ID, not capCode)
+  lexSelectAll?.addEventListener('click', () => {
+    const state = vehicleBrowserState.lex;
+    const allSelected = state.vehicles.every(v => state.selected.has(v.id));
+
+    if (allSelected) {
+      // Deselect all on current page
+      state.vehicles.forEach(v => state.selected.delete(v.id));
+      lexSelectAll.textContent = 'Select All';
+    } else {
+      // Select all on current page
+      state.vehicles.forEach(v => state.selected.add(v.id));
+      lexSelectAll.textContent = 'Deselect All';
+    }
+
+    // Update checkboxes
+    lexVehicleList.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+      cb.checked = state.selected.has(cb.dataset.id);
+    });
+
+    updateSelectionUI('lex');
+  });
+
+  // Select All - Drivalia (uses vehicle ID, not capCode)
+  drivaliaSelectAll?.addEventListener('click', () => {
+    const state = vehicleBrowserState.drivalia;
+    const allSelected = state.vehicles.every(v => state.selected.has(v.id));
+
+    if (allSelected) {
+      state.vehicles.forEach(v => state.selected.delete(v.id));
+      drivaliaSelectAll.textContent = 'Select All';
+    } else {
+      state.vehicles.forEach(v => state.selected.add(v.id));
+      drivaliaSelectAll.textContent = 'Deselect All';
+    }
+
+    drivaliaVehicleList.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+      cb.checked = state.selected.has(cb.dataset.id);
+    });
+
+    updateSelectionUI('drivalia');
+  });
+
+  // Add to Queue - Lex
+  lexAddToQueueBtn?.addEventListener('click', async () => {
+    const state = vehicleBrowserState.lex;
+    if (state.selected.size === 0) return;
+
+    lexAddToQueueBtn.disabled = true;
+    lexAddToQueueBtn.textContent = 'Adding...';
+
+    try {
+      const term = parseInt(lexConfigTerm.value);
+      const mileage = parseInt(lexConfigMileage.value);
+      const contractType = lexConfigContract.value;
+
+      // Get full vehicle info for selected vehicle IDs
+      // Look in both current page and allVehicles (full list)
+      const allVehicles = state.allVehicles || state.vehicles;
+      const selectedVehicles = allVehicles.filter(v => state.selected.has(v.id));
+
+      // Build queue items with Lex codes (matching admin page format)
+      const vehicles = selectedVehicles.map(v => ({
+        vehicleId: v.id,
+        capCode: v.capCode,
+        manufacturer: v.manufacturer,
+        model: v.model,
+        variant: v.variant || '',
+        lexMakeCode: v.lexMakeCode,
+        lexModelCode: v.lexModelCode,
+        lexVariantCode: v.lexVariantCode,
+        term,
+        mileage,
+        contractType,
+        co2: v.co2 || 0
+      }));
+
+      const response = await fetch(`${API_URL}/api/lex-autolease/quote-queue`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ vehicles })
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        lexStatusEl.className = 'status success';
+        lexStatusEl.textContent = `Added ${vehicles.length} vehicles to queue`;
+        state.selected.clear();
+        updateSelectionUI('lex');
+        loadVehicles('lex');
+        await checkLexQueue();
+      } else {
+        throw new Error(data.error || 'Failed to add to queue');
+      }
+    } catch (error) {
+      console.error('Failed to add to Lex queue:', error);
+      lexStatusEl.className = 'status error';
+      lexStatusEl.textContent = `Failed: ${error.message}`;
+    }
+
+    lexAddToQueueBtn.disabled = false;
+    updateSelectionUI('lex');
+  });
+
+  // Add to Queue - Drivalia
+  drivaliaAddToQueueBtn?.addEventListener('click', async () => {
+    const state = vehicleBrowserState.drivalia;
+    if (state.selected.size === 0) return;
+
+    drivaliaAddToQueueBtn.disabled = true;
+    drivaliaAddToQueueBtn.textContent = 'Adding...';
+
+    try {
+      const term = parseInt(drivaliaConfigTerm.value);
+      const mileage = parseInt(drivaliaConfigMileage.value);
+      const contractType = drivaliaConfigContract.value;
+
+      // Get full vehicle info for selected vehicle IDs
+      const allVehicles = state.allVehicles || state.vehicles;
+      const selectedVehicles = allVehicles.filter(v => state.selected.has(v.id));
+
+      // Build queue items with CAP codes
+      const items = selectedVehicles.map(v => ({
+        vehicleId: v.id,
+        capCode: v.capCode,
+        manufacturer: v.manufacturer,
+        model: v.model,
+        variant: v.variant || '',
+        term,
+        mileage,
+        contractType
+      }));
+
+      const response = await fetch(`${API_URL}/api/drivalia/quote-queue`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items })
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        drivaliaStatusEl.className = 'status success';
+        drivaliaStatusEl.textContent = `Added ${items.length} vehicles to queue`;
+        state.selected.clear();
+        updateSelectionUI('drivalia');
+        loadVehicles('drivalia');
+        await checkDrivaliaQueue();
+      } else {
+        throw new Error(data.error || 'Failed to add to queue');
+      }
+    } catch (error) {
+      console.error('Failed to add to Drivalia queue:', error);
+      drivaliaStatusEl.className = 'status error';
+      drivaliaStatusEl.textContent = `Failed: ${error.message}`;
+    }
+
+    drivaliaAddToQueueBtn.disabled = false;
+    updateSelectionUI('drivalia');
+  });
 });
