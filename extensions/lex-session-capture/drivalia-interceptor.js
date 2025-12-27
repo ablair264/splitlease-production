@@ -6,10 +6,15 @@
   // Helper to check if URL should be intercepted
   function shouldIntercept(url) {
     if (!url || typeof url !== 'string') return false;
-    // Intercept both /calculate/ (for pricing data) and /application/ (for saved quotes)
-    const shouldCapture = url.includes('/calculate/') || url.includes('/application/') || url.includes('/calculate');
-    if (url.includes('api') || url.includes('calculate') || url.includes('application')) {
-      console.log('[Drivalia MAIN] URL check:', url.substring(0, 100), '-> intercept:', shouldCapture);
+    // Intercept pricing and save endpoints
+    // - /calculate/ or /calculate - pricing calculation
+    // - /application/ - saved quote details
+    // - /quote/ - alternative quote endpoints
+    // - /save - save operations
+    const patterns = ['/calculate/', '/calculate', '/application/', '/application', '/quote/', '/save'];
+    const shouldCapture = patterns.some(p => url.includes(p));
+    if (url.includes('api') || url.includes('calculate') || url.includes('application') || url.includes('quote') || url.includes('save')) {
+      console.log('[Drivalia MAIN] URL check:', url.substring(0, 120), '-> intercept:', shouldCapture);
     }
     return shouldCapture;
   }
@@ -127,28 +132,33 @@
     });
   };
 
-  // Store original XHR
+  // Store original XHR - wrap before Angular loads
   const originalOpen = XMLHttpRequest.prototype.open;
   const originalSend = XMLHttpRequest.prototype.send;
 
   XMLHttpRequest.prototype.open = function(method, url) {
     this._drivaliaUrl = url;
+    this._drivaliaMethod = method;
     return originalOpen.apply(this, arguments);
   };
 
-  XMLHttpRequest.prototype.send = function() {
+  XMLHttpRequest.prototype.send = function(body) {
+    const self = this;
     this.addEventListener('load', function() {
-      if (shouldIntercept(this._drivaliaUrl)) {
-        console.log('[Drivalia MAIN] Intercepting XHR response for:', this._drivaliaUrl);
+      const url = self._drivaliaUrl;
+      if (shouldIntercept(url)) {
+        console.log('[Drivalia MAIN] XHR load event for:', url);
         try {
-          const data = JSON.parse(this.responseText);
-          console.log('[Drivalia MAIN] Posting XHR response, keys:', Object.keys(data || {}));
+          const data = JSON.parse(self.responseText);
+          const hasSchedule = data?.summary?.assetLines?.[0]?.schedule?.length > 0;
+          const p11d = data?.summary?.assetLines?.[0]?.p11d;
+          console.log('[Drivalia MAIN] XHR response parsed - hasSchedule:', hasSchedule, 'p11d:', p11d);
           window.postMessage({
             type: 'DRIVALIA_QUOTE_RESPONSE',
             data: data,
-            url: this._drivaliaUrl
+            url: url
           }, '*');
-          console.log('[Drivalia MAIN] Posted DRIVALIA_QUOTE_RESPONSE for:', this._drivaliaUrl);
+          console.log('[Drivalia MAIN] Posted DRIVALIA_QUOTE_RESPONSE');
         } catch (e) {
           console.log('[Drivalia MAIN] Failed to parse XHR response:', e.message);
         }

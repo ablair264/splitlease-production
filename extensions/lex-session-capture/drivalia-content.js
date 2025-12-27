@@ -241,9 +241,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 async function runQuote({ capCode, term, mileage, contractType, companyName = 'Quote Test Ltd', upfrontPayments = 3 }) {
   console.log('[Drivalia] Starting quote automation:', { capCode, term, mileage, contractType, upfrontPayments });
 
+  // Clear any stale response data from previous quotes
+  lastQuoteResponse = null;
+  console.log('[Drivalia] Cleared previous response data');
+
   try {
     // Ensure we're on the new quote page
     if (!window.location.hash.includes('/quoting/new')) {
+      console.log('[Drivalia] Navigating to new quote page...');
       window.location.hash = '/quoting/new';
       await sleep(2000);
     }
@@ -528,30 +533,44 @@ async function runQuote({ capCode, term, mileage, contractType, companyName = 'Q
 
     // Step 16: Click Recalculate (from Playwright: getByRole('button', { name: 'Recalculate' }))
     console.log('[Drivalia] Clicking Recalculate...');
+    lastQuoteResponse = null; // Clear BEFORE recalculate so we capture fresh response
     const recalculateBtn = await findByRole('button', 'Recalculate');
     clickElement(recalculateBtn);
 
     // Wait for "Recalculating" to disappear (max 30 seconds)
     console.log('[Drivalia] Waiting for calculation to complete...');
-    lastQuoteResponse = null; // Clear BEFORE recalculate so we capture fresh response
     await sleep(1000); // Initial wait for recalculating to start
     let recalcWait = 0;
     while (recalcWait < 30000) {
       const recalculating = document.querySelector('when-waiting');
       if (!recalculating || !recalculating.textContent?.includes('Recalculating')) {
-        console.log('[Drivalia] Calculation completed after', recalcWait, 'ms');
+        console.log('[Drivalia] Calculation UI completed after', recalcWait, 'ms');
         break;
       }
       await sleep(500);
       recalcWait += 500;
     }
-    await sleep(1500); // Extra buffer for API response to be captured
+
+    // Wait for the response to be captured (up to 10 seconds after UI completes)
+    console.log('[Drivalia] Waiting for calculate response to be captured...');
+    let responseWait = 0;
+    while (!lastQuoteResponse && responseWait < 10000) {
+      await sleep(200);
+      responseWait += 200;
+    }
 
     // Check if we got pricing from the /calculate/ endpoint
-    console.log('[Drivalia] Checking for captured pricing response...');
-    console.log('[Drivalia] lastQuoteResponse set:', !!lastQuoteResponse);
+    console.log('[Drivalia] Response capture result - set:', !!lastQuoteResponse, 'waited:', responseWait, 'ms');
     if (lastQuoteResponse) {
-      console.log('[Drivalia] Captured response keys:', Object.keys(lastQuoteResponse));
+      const schedule = lastQuoteResponse?.summary?.assetLines?.[0]?.schedule;
+      const p11d = lastQuoteResponse?.summary?.assetLines?.[0]?.p11d;
+      console.log('[Drivalia] Captured pricing - P11D:', p11d, 'schedule entries:', schedule?.length);
+      if (schedule?.[1]) {
+        console.log('[Drivalia] Monthly rental (net):', schedule[1].netValue);
+      }
+    } else {
+      console.error('[Drivalia] ERROR: No response captured from /calculate/ endpoint!');
+      console.log('[Drivalia] Check console for [Drivalia MAIN] messages to verify interceptor is working');
     }
 
     // Step 17: Click Save Quote (from Playwright: getByRole('button', { name: ' Save Quote' }) - note space)
@@ -596,8 +615,25 @@ async function runQuote({ capCode, term, mileage, contractType, companyName = 'Q
       dpaWait += 300;
     }
 
-    // Step 19: Extract results (pricing came from /calculate/, quote ID comes from save)
+    // Step 19: Try to get quote ID from URL (page should navigate to /quoting/{id} after save)
+    await sleep(1000); // Wait for navigation
+    let quoteIdFromUrl = null;
+    const currentUrl = window.location.hash;
+    console.log('[Drivalia] Current URL after save:', currentUrl);
+    const urlMatch = currentUrl.match(/\/quoting\/(\d+)/);
+    if (urlMatch) {
+      quoteIdFromUrl = urlMatch[1];
+      console.log('[Drivalia] Quote ID from URL:', quoteIdFromUrl);
+    }
+
+    // Step 20: Extract results (pricing came from /calculate/, quote ID from URL or save response)
     const result = await extractQuoteResult();
+
+    // If we got quote ID from URL but not from response, use the URL one
+    if (quoteIdFromUrl && !result.quoteId) {
+      result.quoteId = quoteIdFromUrl;
+      console.log('[Drivalia] Using quote ID from URL:', quoteIdFromUrl);
+    }
     console.log('[Drivalia] Quote completed:', result);
 
     return {
