@@ -39,6 +39,7 @@ export async function POST(req: NextRequest) {
       action = "analyze",
       dryRun = false,
       columnMappings,
+      forceReimport = false,
     } = body as {
       fileName: string;
       fileContent: string;
@@ -47,6 +48,7 @@ export async function POST(req: NextRequest) {
       action?: "analyze" | "import";
       dryRun?: boolean;
       columnMappings?: Record<number, string>; // sourceColumn -> targetField
+      forceReimport?: boolean; // Skip duplicate check and reimport
     };
 
     if (!fileName || !fileContent) {
@@ -112,6 +114,7 @@ export async function POST(req: NextRequest) {
       userId: session.user.id,
       dryRun,
       columnMappings,
+      forceReimport,
     });
 
     return NextResponse.json({

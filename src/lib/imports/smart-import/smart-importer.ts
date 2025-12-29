@@ -117,8 +117,8 @@ export async function smartImport(
 
   const fileHash = createHash("sha256").update(buffer).digest("hex");
 
-  // Check for duplicate
-  if (!dryRun) {
+  // Check for duplicate (skip if dry run or forceReimport)
+  if (!dryRun && !options.forceReimport) {
     const existing = await db
       .select()
       .from(ratebookImports)
@@ -126,18 +126,24 @@ export async function smartImport(
       .limit(1);
 
     if (existing.length > 0) {
-      return {
-        success: false,
-        format: "unknown",
-        totalSheets: 0,
-        processedSheets: 0,
-        totalRates: 0,
-        successRates: 0,
-        errorRates: 0,
-        rates: [],
-        errors: [`Duplicate file - already imported on ${existing[0].createdAt}`],
-        warnings: [],
-      };
+      // Allow reimport if previous import failed
+      if (existing[0].status === "failed" || existing[0].status === "processing") {
+        // Delete the failed/stuck import to allow reimport
+        await db.delete(ratebookImports).where(eq(ratebookImports.id, existing[0].id));
+      } else {
+        return {
+          success: false,
+          format: "unknown",
+          totalSheets: 0,
+          processedSheets: 0,
+          totalRates: 0,
+          successRates: 0,
+          errorRates: 0,
+          rates: [],
+          errors: [`Duplicate file - already imported on ${existing[0].createdAt}. Use "Force Reimport" to import again.`],
+          warnings: [],
+        };
+      }
     }
   }
 
@@ -272,13 +278,25 @@ async function parseTabularWorkbook(
         // Helper to get numeric value in pence (multiply by 100)
         const getPence = (field: string): number | undefined => {
           const val = getValue(field);
-          return val ? Math.round(Number(val) * 100) : undefined;
+          if (!val) return undefined;
+          const num = Number(val);
+          return isNaN(num) ? undefined : Math.round(num * 100);
         };
 
-        // Helper to get raw numeric value
-        const getNum = (field: string): number | undefined => {
+        // Helper to get integer value (rounds decimals)
+        const getInt = (field: string): number | undefined => {
           const val = getValue(field);
-          return val ? Number(val) : undefined;
+          if (!val) return undefined;
+          const num = Number(val);
+          return isNaN(num) ? undefined : Math.round(num);
+        };
+
+        // Helper to get decimal value (for numeric columns that allow decimals)
+        const getDecimal = (field: string): number | undefined => {
+          const val = getValue(field);
+          if (!val) return undefined;
+          const num = Number(val);
+          return isNaN(num) ? undefined : num;
         };
 
         // Helper to get string value
@@ -314,27 +332,27 @@ async function parseTabularWorkbook(
           p11d: getPence("p11d"),
           isMaintained: true,
           // Vehicle specs
-          co2: getNum("co2"),
+          co2: getInt("co2"),
           fuelType: getStr("fuelType"),
           transmission: getStr("transmission"),
           // Excess mileage (already in pence per mile typically)
-          excessMileagePpm: getNum("excessMileagePpm"),
-          financeEmcPpm: getNum("financeEmcPpm"),
-          serviceEmcPpm: getNum("serviceEmcPpm"),
+          excessMileagePpm: getInt("excessMileagePpm"),
+          financeEmcPpm: getInt("financeEmcPpm"),
+          serviceEmcPpm: getInt("serviceEmcPpm"),
           // EV/Hybrid
-          wltpEvRange: getNum("wltpEvRange"),
-          wltpEvRangeMin: getNum("wltpEvRangeMin"),
-          wltpEvRangeMax: getNum("wltpEvRangeMax"),
-          wltpEaerMiles: getNum("wltpEaerMiles"),
-          fuelEcoCombined: getNum("fuelEcoCombined"),
+          wltpEvRange: getInt("wltpEvRange"),
+          wltpEvRangeMin: getInt("wltpEvRangeMin"),
+          wltpEvRangeMax: getInt("wltpEvRangeMax"),
+          wltpEaerMiles: getInt("wltpEaerMiles"),
+          fuelEcoCombined: getDecimal("fuelEcoCombined"), // MPG can be decimal
           // BIK / Salary Sacrifice
           bikTaxLowerRate: getPence("bikTaxLowerRate"),
           bikTaxHigherRate: getPence("bikTaxHigherRate"),
-          bikPercent: getNum("bikPercent"),
+          bikPercent: getDecimal("bikPercent"), // Percentage can be decimal
           // Cost analysis
           wholeLifeCost: getPence("wholeLifeCost"),
           estimatedSaleValue: getPence("estimatedSaleValue"),
-          fuelCostPpm: getNum("fuelCostPpm"),
+          fuelCostPpm: getInt("fuelCostPpm"),
           insuranceGroup: getStr("insuranceGroup"),
           // Ratings
           euroRating: getStr("euroRating"),

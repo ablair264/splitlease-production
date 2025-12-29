@@ -152,6 +152,7 @@ export interface SmartImportOptions {
   userId?: string;
   dryRun?: boolean; // Parse only, don't save to DB
   columnMappings?: Record<number, string>; // Custom column mappings: sourceColumn -> targetField
+  forceReimport?: boolean; // Skip duplicate check and reimport even if file was imported before
 }
 
 // Common payment profile patterns

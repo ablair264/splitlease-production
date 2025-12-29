@@ -199,6 +199,7 @@ function SmartImportModal({
     source: string;
   }> | null>(null);
   const [isLoadingPreview, setIsLoadingPreview] = useState(false);
+  const [forceReimport, setForceReimport] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Available target fields for column mapping - matches provider_rates schema
@@ -350,6 +351,7 @@ function SmartImportModal({
           contractType: contractType || undefined,
           action: "import",
           dryRun: false,
+          forceReimport,
           // Pass custom column mappings for tabular format
           columnMappings: columnMappings.length > 0
             ? columnMappings.reduce((acc, m) => {
@@ -397,6 +399,7 @@ function SmartImportModal({
     setAnalysisResult(null);
     setColumnMappings([]);
     setPreviewData(null);
+    setForceReimport(false);
     setStep("upload");
   };
 
@@ -563,6 +566,19 @@ function SmartImportModal({
                       </option>
                     ))}
                   </select>
+                </div>
+
+                {/* Force Reimport Checkbox */}
+                <div className="mb-4">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={forceReimport}
+                      onChange={(e) => setForceReimport(e.target.checked)}
+                      className="w-4 h-4 rounded border-gray-600 bg-[#1a1f2a] text-purple-500 focus:ring-purple-500/50"
+                    />
+                    <span className="text-sm text-white/60">Force reimport (skip duplicate check)</span>
+                  </label>
                 </div>
 
                 {/* File Input */}
