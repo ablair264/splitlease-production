@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { cn, getApiBaseUrl } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import {
   Upload,
   RefreshCw,
@@ -17,7 +17,6 @@ import {
   Loader2,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
-import ColumnMappingModal from "@/components/admin/ColumnMappingModal";
 
 // Types
 interface Import {
@@ -175,9 +174,7 @@ function SmartImportModal({
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<ImportResult | null>(null);
   const [fileContent, setFileContent] = useState<string>("");
-  const [step, setStep] = useState<"upload" | "preview" | "mapping" | "result">("upload");
-  const [headers, setHeaders] = useState<string[]>([]);
-  const [sampleRows, setSampleRows] = useState<Record<string, string>[]>([]);
+  const [step, setStep] = useState<"upload" | "preview" | "result">("upload");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const PROVIDERS = [
@@ -235,31 +232,9 @@ function SmartImportModal({
 
       setAnalysisResult(data);
 
-      if (data.format === "matrix") {
-        // For matrix format, show preview directly
+      if (data.format === "matrix" || data.format === "tabular") {
+        // Both formats: show preview with detected rates
         setStep("preview");
-      } else if (data.format === "tabular") {
-        // For tabular format, extract headers for column mapping
-        const apiBase = getApiBaseUrl();
-        const headersResponse = await fetch(`${apiBase}/api/admin/providers/extract-headers`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            fileContent: base64,
-            fileName: selectedFile.name,
-            isBase64: true,
-          }),
-        });
-
-        if (headersResponse.ok) {
-          const headersData = await headersResponse.json();
-          setHeaders(headersData.headers);
-          setSampleRows(headersData.sampleRows);
-          setStep("mapping");
-        } else {
-          // Fallback to preview if header extraction fails
-          setStep("preview");
-        }
       } else {
         setError("Could not detect file format. Please ensure the file has recognizable headers or matrix structure.");
       }
@@ -318,79 +293,10 @@ function SmartImportModal({
     }
   };
 
-  const handleMappingConfirm = async (
-    mappings: Record<string, string | null>,
-    providerName: string,
-    saveConfig: boolean
-  ) => {
-    if (!file) return;
-
-    setStep("upload");
-    setIsImporting(true);
-    setError(null);
-
-    try {
-      const apiBase = getApiBaseUrl();
-      const mappedProviderCode = providerName.toLowerCase().replace(/[^a-z0-9]/g, "_");
-
-      // Save provider configuration if requested
-      if (saveConfig) {
-        await fetch(`${apiBase}/api/admin/providers`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            providerName,
-            columnMappings: mappings,
-            fileFormat: file.name.toLowerCase().endsWith(".csv") ? "csv" : "xlsx",
-          }),
-        });
-      }
-
-      // Import with mappings
-      const response = await fetch(`${apiBase}/api/admin/ratebooks/import-with-mappings`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          fileName: file.name,
-          contractType: contractType || "CH",
-          fileContent,
-          providerCode: mappedProviderCode,
-          columnMappings: mappings,
-        }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        setError(data.error || "Upload failed");
-        return;
-      }
-
-      setResult({
-        success: data.success,
-        stats: {
-          totalRows: data.totalRows || 0,
-          successRows: data.successRows || 0,
-          errorRows: data.errorRows || 0,
-        },
-        errors: data.errors,
-      });
-
-      setStep("result");
-      onImportComplete?.();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Upload failed");
-    } finally {
-      setIsImporting(false);
-    }
-  };
-
   const handleReset = () => {
     setFile(null);
     setProviderCode("");
     setContractType("");
-    setHeaders([]);
-    setSampleRows([]);
     setError(null);
     setResult(null);
     setFileContent("");
@@ -430,7 +336,6 @@ function SmartImportModal({
                 <p className="text-sm text-gray-500">
                   {step === "upload" && "Auto-detects tabular and matrix formats"}
                   {step === "preview" && analysisResult && `Detected ${analysisResult.format} format`}
-                  {step === "mapping" && "Map columns to fields"}
                   {step === "result" && "Import complete"}
                 </p>
               </div>
@@ -740,15 +645,6 @@ function SmartImportModal({
         </div>
       </div>
 
-      {/* Column Mapping Modal for tabular files */}
-      <ColumnMappingModal
-        isOpen={step === "mapping"}
-        onClose={() => setStep("upload")}
-        onConfirm={handleMappingConfirm}
-        fileName={file?.name || ""}
-        headers={headers}
-        sampleRows={sampleRows}
-      />
     </>
   );
 }
