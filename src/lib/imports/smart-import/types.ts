@@ -73,23 +73,58 @@ export interface ExtractedVehicleInfo {
 }
 
 export interface ParsedRate {
+  // Identifiers
   capCode?: string;
   capId?: string;
+  // Vehicle info
   manufacturer: string;
   model: string;
   variant?: string;
+  bodyStyle?: string;
+  modelYear?: string;
+  // Contract terms
   term: number;
   annualMileage: number;
   initialMonths: number;
   paymentProfile: string; // e.g., "3+35"
+  paymentPlan?: string;
   contractType: ContractType;
-  monthlyRental: number; // in pence
-  isMaintained: boolean;
+  // Pricing (all in pence)
+  monthlyRental: number; // Total rental
+  leaseRental?: number;
+  serviceRental?: number;
+  nonRecoverableVat?: number;
+  basicListPrice?: number;
   otr?: number;
   p11d?: number;
+  isMaintained: boolean;
+  // Vehicle specs
   co2?: number;
   fuelType?: string;
   transmission?: string;
+  // Excess mileage (pence per mile)
+  excessMileagePpm?: number;
+  financeEmcPpm?: number;
+  serviceEmcPpm?: number;
+  // EV/Hybrid
+  wltpEvRange?: number;
+  wltpEvRangeMin?: number;
+  wltpEvRangeMax?: number;
+  wltpEaerMiles?: number;
+  fuelEcoCombined?: number;
+  // BIK / Salary Sacrifice
+  bikTaxLowerRate?: number;
+  bikTaxHigherRate?: number;
+  bikPercent?: number;
+  // Cost analysis
+  wholeLifeCost?: number;
+  estimatedSaleValue?: number;
+  fuelCostPpm?: number;
+  insuranceGroup?: string;
+  // Ratings
+  euroRating?: string;
+  rdeCertificationLevel?: string;
+  // Source tracking
   quoteNumber?: string;
   sourceSheet: string;
   sourceRow: number;

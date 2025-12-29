@@ -188,22 +188,56 @@ function SmartImportModal({
   const [columnMappings, setColumnMappings] = useState<ColumnMappingItem[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Available target fields for column mapping
+  // Available target fields for column mapping - matches provider_rates schema
   const TARGET_FIELDS = [
     { value: "", label: "-- Skip this column --" },
+    // Identifiers
     { value: "capCode", label: "CAP Code", required: true },
     { value: "capId", label: "CAP ID" },
+    // Vehicle info
     { value: "manufacturer", label: "Manufacturer", required: true },
     { value: "model", label: "Model" },
     { value: "variant", label: "Variant / Description" },
+    { value: "bodyStyle", label: "Body Style" },
+    { value: "modelYear", label: "Model Year" },
+    // Contract terms
     { value: "term", label: "Term (months)", required: true },
     { value: "annualMileage", label: "Annual Mileage", required: true },
-    { value: "monthlyRental", label: "Monthly Rental", required: true },
+    { value: "paymentPlan", label: "Payment Plan" },
+    // Pricing
+    { value: "monthlyRental", label: "Monthly Rental (Total)", required: true },
+    { value: "leaseRental", label: "Lease/Finance Rental" },
+    { value: "serviceRental", label: "Service/Maintenance Rental" },
+    { value: "nonRecoverableVat", label: "Non-Recoverable VAT" },
+    { value: "basicListPrice", label: "Basic List Price" },
     { value: "otr", label: "OTR Price" },
     { value: "p11d", label: "P11D Value" },
-    { value: "co2", label: "CO2 Emissions" },
+    // Vehicle specs
+    { value: "co2", label: "CO2 (g/km)" },
     { value: "fuelType", label: "Fuel Type" },
     { value: "transmission", label: "Transmission" },
+    // Excess mileage
+    { value: "excessMileagePpm", label: "Excess Mileage (pence/mile)" },
+    { value: "financeEmcPpm", label: "Finance EMC (pence/mile)" },
+    { value: "serviceEmcPpm", label: "Service EMC (pence/mile)" },
+    // EV/Hybrid
+    { value: "wltpEvRange", label: "WLTP EV Range (miles)" },
+    { value: "wltpEvRangeMin", label: "WLTP EV Range Min" },
+    { value: "wltpEvRangeMax", label: "WLTP EV Range Max" },
+    { value: "wltpEaerMiles", label: "WLTP EAER (miles)" },
+    { value: "fuelEcoCombined", label: "Fuel Economy Combined (MPG)" },
+    // BIK / Salary Sacrifice
+    { value: "bikTaxLowerRate", label: "BIK Tax (20%)" },
+    { value: "bikTaxHigherRate", label: "BIK Tax (40%)" },
+    { value: "bikPercent", label: "BIK Percentage" },
+    // Cost analysis
+    { value: "wholeLifeCost", label: "Whole Life Cost" },
+    { value: "estimatedSaleValue", label: "Estimated Sale Value" },
+    { value: "fuelCostPpm", label: "Fuel Cost (pence/mile)" },
+    { value: "insuranceGroup", label: "Insurance Group" },
+    // Ratings
+    { value: "euroRating", label: "Euro Rating" },
+    { value: "rdeCertificationLevel", label: "RDE Certification Level" },
   ];
 
   const PROVIDERS = [

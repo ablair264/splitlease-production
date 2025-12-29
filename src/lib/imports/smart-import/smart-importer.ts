@@ -269,19 +269,77 @@ async function parseTabularWorkbook(
           continue; // Skip rows without rental
         }
 
+        // Helper to get numeric value in pence (multiply by 100)
+        const getPence = (field: string): number | undefined => {
+          const val = getValue(field);
+          return val ? Math.round(Number(val) * 100) : undefined;
+        };
+
+        // Helper to get raw numeric value
+        const getNum = (field: string): number | undefined => {
+          const val = getValue(field);
+          return val ? Number(val) : undefined;
+        };
+
+        // Helper to get string value
+        const getStr = (field: string): string | undefined => {
+          const val = getValue(field);
+          return val ? String(val).trim() : undefined;
+        };
+
         rates.push({
+          // Identifiers
           capCode: capCode || undefined,
           capId: capId || undefined,
+          // Vehicle info
           manufacturer: String(getValue("manufacturer") || "Unknown"),
           model: String(getValue("model") || "Unknown"),
-          variant: String(getValue("variant") || "") || undefined,
+          variant: getStr("variant"),
+          bodyStyle: getStr("bodyStyle"),
+          modelYear: getStr("modelYear"),
+          // Contract terms
           term,
           annualMileage: mileage,
           initialMonths: 1,
           paymentProfile: `1+${term - 1}`,
+          paymentPlan: getStr("paymentPlan"),
           contractType: options.contractType || "BCH",
+          // Pricing (convert to pence)
           monthlyRental: Math.round(rental * 100),
+          leaseRental: getPence("leaseRental"),
+          serviceRental: getPence("serviceRental"),
+          nonRecoverableVat: getPence("nonRecoverableVat"),
+          basicListPrice: getPence("basicListPrice"),
+          otr: getPence("otr"),
+          p11d: getPence("p11d"),
           isMaintained: true,
+          // Vehicle specs
+          co2: getNum("co2"),
+          fuelType: getStr("fuelType"),
+          transmission: getStr("transmission"),
+          // Excess mileage (already in pence per mile typically)
+          excessMileagePpm: getNum("excessMileagePpm"),
+          financeEmcPpm: getNum("financeEmcPpm"),
+          serviceEmcPpm: getNum("serviceEmcPpm"),
+          // EV/Hybrid
+          wltpEvRange: getNum("wltpEvRange"),
+          wltpEvRangeMin: getNum("wltpEvRangeMin"),
+          wltpEvRangeMax: getNum("wltpEvRangeMax"),
+          wltpEaerMiles: getNum("wltpEaerMiles"),
+          fuelEcoCombined: getNum("fuelEcoCombined"),
+          // BIK / Salary Sacrifice
+          bikTaxLowerRate: getPence("bikTaxLowerRate"),
+          bikTaxHigherRate: getPence("bikTaxHigherRate"),
+          bikPercent: getNum("bikPercent"),
+          // Cost analysis
+          wholeLifeCost: getPence("wholeLifeCost"),
+          estimatedSaleValue: getPence("estimatedSaleValue"),
+          fuelCostPpm: getNum("fuelCostPpm"),
+          insuranceGroup: getStr("insuranceGroup"),
+          // Ratings
+          euroRating: getStr("euroRating"),
+          rdeCertificationLevel: getStr("rdeCertificationLevel"),
+          // Source tracking
           sourceSheet: analysis.name,
           sourceRow: rowIdx,
           sourceCol: 0,
@@ -391,22 +449,57 @@ async function saveRatesToDatabase(
       const paymentPlan = mapPaymentProfile(rate.paymentProfile);
 
       ratesToInsert.push({
+        // Identifiers
         capCode: rate.capCode || null,
         vehicleId,
         importId,
         providerCode: options.providerCode,
         contractType: rate.contractType,
+        // Vehicle info
         manufacturer: rate.manufacturer,
         model: rate.model,
         variant: rate.variant || null,
+        bodyStyle: rate.bodyStyle || null,
+        modelYear: rate.modelYear || null,
         isCommercial: false,
+        // Contract terms
         term: rate.term,
         annualMileage: rate.annualMileage,
-        paymentPlan,
+        paymentPlan: rate.paymentPlan || paymentPlan,
+        // Pricing
         totalRental: rate.monthlyRental,
-        leaseRental: rate.isMaintained ? null : rate.monthlyRental,
-        serviceRental: null,
+        leaseRental: rate.leaseRental || (rate.isMaintained ? null : rate.monthlyRental),
+        serviceRental: rate.serviceRental || null,
+        nonRecoverableVat: rate.nonRecoverableVat || null,
+        basicListPrice: rate.basicListPrice || null,
         otrPrice: rate.otr || null,
+        p11d: rate.p11d || null,
+        // Vehicle specs
+        co2Gkm: rate.co2 || null,
+        fuelType: rate.fuelType || null,
+        transmission: rate.transmission || null,
+        // Excess mileage
+        excessMileagePpm: rate.excessMileagePpm || null,
+        financeEmcPpm: rate.financeEmcPpm || null,
+        serviceEmcPpm: rate.serviceEmcPpm || null,
+        // EV/Hybrid
+        wltpEvRange: rate.wltpEvRange || null,
+        wltpEvRangeMin: rate.wltpEvRangeMin || null,
+        wltpEvRangeMax: rate.wltpEvRangeMax || null,
+        wltpEaerMiles: rate.wltpEaerMiles || null,
+        fuelEcoCombined: rate.fuelEcoCombined ? String(rate.fuelEcoCombined) : null,
+        // BIK / Salary Sacrifice
+        bikTaxLowerRate: rate.bikTaxLowerRate || null,
+        bikTaxHigherRate: rate.bikTaxHigherRate || null,
+        bikPercent: rate.bikPercent ? String(rate.bikPercent) : null,
+        // Cost analysis
+        wholeLifeCost: rate.wholeLifeCost || null,
+        estimatedSaleValue: rate.estimatedSaleValue || null,
+        fuelCostPpm: rate.fuelCostPpm || null,
+        insuranceGroup: rate.insuranceGroup || null,
+        // Ratings
+        euroRating: rate.euroRating || null,
+        rdeCertificationLevel: rate.rdeCertificationLevel || null,
       });
     }
 
