@@ -186,6 +186,19 @@ function SmartImportModal({
   const [fileContent, setFileContent] = useState<string>("");
   const [step, setStep] = useState<"upload" | "mapping" | "preview" | "result">("upload");
   const [columnMappings, setColumnMappings] = useState<ColumnMappingItem[]>([]);
+  const [previewData, setPreviewData] = useState<Array<{
+    manufacturer: string;
+    model: string;
+    variant?: string;
+    term: number;
+    mileage: number;
+    profile: string;
+    monthly: number;
+    maintained: boolean;
+    contract: string;
+    source: string;
+  }> | null>(null);
+  const [isLoadingPreview, setIsLoadingPreview] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Available target fields for column mapping - matches provider_rates schema
@@ -383,6 +396,7 @@ function SmartImportModal({
     setFileContent("");
     setAnalysisResult(null);
     setColumnMappings([]);
+    setPreviewData(null);
     setStep("upload");
   };
 
@@ -396,11 +410,10 @@ function SmartImportModal({
     );
   };
 
-  const handleProceedToPreview = () => {
+  const handleProceedToPreview = async () => {
     // Validate required fields are mapped
     const mappedFields = columnMappings.filter((m) => m.targetField).map((m) => m.targetField);
     const requiredFields = ["capCode", "manufacturer", "term", "annualMileage", "monthlyRental"];
-    const missingRequired = requiredFields.filter((f) => !mappedFields.includes(f));
 
     // capCode OR capId is required
     if (!mappedFields.includes("capCode") && !mappedFields.includes("capId")) {
@@ -417,7 +430,46 @@ function SmartImportModal({
     }
 
     setError(null);
-    setStep("preview");
+    setIsLoadingPreview(true);
+
+    try {
+      // Build column mappings object: sourceColumn -> targetField
+      const mappingsObj: Record<number, string> = {};
+      for (const mapping of columnMappings) {
+        if (mapping.targetField) {
+          mappingsObj[mapping.sourceColumn] = mapping.targetField;
+        }
+      }
+
+      // Do a dry-run import with custom column mappings to get accurate preview
+      const response = await fetch("/api/smart-import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fileName: file?.name,
+          fileContent: fileContent,
+          providerCode: providerCode || "preview",
+          contractType: contractType || undefined,
+          action: "import",
+          dryRun: true,
+          columnMappings: mappingsObj,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to generate preview");
+      }
+
+      // Use the sampleRates from the dry-run as preview
+      setPreviewData(data.sampleRates || []);
+      setStep("preview");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to generate preview");
+    } finally {
+      setIsLoadingPreview(false);
+    }
   };
 
   const handleClose = () => {
@@ -529,15 +581,18 @@ function SmartImportModal({
                       disabled={isAnalyzing || isImporting}
                     />
                     <div className="px-4 py-8 text-center">
-                      {file ? (
+                      {isAnalyzing ? (
+                        <div className="flex flex-col items-center justify-center gap-3 text-purple-400">
+                          <Loader2 className="w-8 h-8 animate-spin" />
+                          <div>
+                            <p className="text-sm font-medium">Analyzing file...</p>
+                            <p className="text-xs text-white/40 mt-1">Detecting columns and format</p>
+                          </div>
+                        </div>
+                      ) : file ? (
                         <div className="flex items-center justify-center gap-2 text-purple-400">
                           <FileSpreadsheet className="w-5 h-5" />
                           <span className="text-sm">{file.name}</span>
-                        </div>
-                      ) : isAnalyzing ? (
-                        <div className="flex items-center justify-center gap-2 text-purple-400">
-                          <Loader2 className="w-5 h-5 animate-spin" />
-                          <span className="text-sm">Analyzing file...</span>
                         </div>
                       ) : (
                         <div className="text-white/40">
@@ -681,10 +736,18 @@ function SmartImportModal({
                   </button>
                   <button
                     onClick={handleProceedToPreview}
-                    className="px-6 py-2 rounded-lg text-sm font-medium text-white flex items-center gap-2 transition-all"
+                    disabled={isLoadingPreview}
+                    className="px-6 py-2 rounded-lg text-sm font-medium text-white flex items-center gap-2 transition-all disabled:opacity-50"
                     style={{ background: "linear-gradient(135deg, #3b82f6 0%, #06b6d4 100%)" }}
                   >
-                    Continue to Preview
+                    {isLoadingPreview ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Generating Preview...
+                      </>
+                    ) : (
+                      "Continue to Preview"
+                    )}
                   </button>
                 </div>
               </>
@@ -707,7 +770,10 @@ function SmartImportModal({
                   </span>
                   {analysisResult.format === "tabular" && (
                     <button
-                      onClick={() => setStep("mapping")}
+                      onClick={() => {
+                        setPreviewData(null);
+                        setStep("mapping");
+                      }}
                       className="text-xs text-blue-400 hover:text-blue-300 underline"
                     >
                       Edit mappings
@@ -733,7 +799,7 @@ function SmartImportModal({
                 {/* Preview Table */}
                 <div className="mb-4">
                   <p className="text-sm text-white/60 mb-2">
-                    Preview ({analysisResult.preview.length} rates detected)
+                    Preview ({(previewData || analysisResult.preview).length} rates detected)
                   </p>
                   <div className="overflow-x-auto rounded-lg border border-white/10">
                     <table className="w-full text-xs">
@@ -748,36 +814,65 @@ function SmartImportModal({
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-white/5">
-                        {analysisResult.preview.slice(0, 10).map((rate, i) => (
-                          <tr key={i} className="hover:bg-white/5">
-                            <td className="px-3 py-2 text-white/80">
-                              {rate.manufacturer} {rate.model}
-                              {rate.variant && <span className="text-white/40 ml-1">{rate.variant}</span>}
-                            </td>
-                            <td className="px-3 py-2 text-white/60">{rate.term}m</td>
-                            <td className="px-3 py-2 text-white/60">{(rate.annualMileage / 1000).toFixed(0)}k</td>
-                            <td className="px-3 py-2 text-white/60">{rate.paymentProfile}</td>
-                            <td className="px-3 py-2 text-right text-[#79d5e9] font-medium">
-                              £{(rate.monthlyRental / 100).toFixed(2)}
-                            </td>
-                            <td className="px-3 py-2 text-center">
-                              <span className={cn(
-                                "px-1.5 py-0.5 rounded text-[10px]",
-                                rate.isMaintained
-                                  ? "bg-green-500/20 text-green-400"
-                                  : "bg-gray-500/20 text-gray-400"
-                              )}>
-                                {rate.contractType}
-                              </span>
-                            </td>
-                          </tr>
-                        ))}
+                        {previewData ? (
+                          // Use dry-run preview data with custom column mappings
+                          previewData.slice(0, 10).map((rate, i) => (
+                            <tr key={i} className="hover:bg-white/5">
+                              <td className="px-3 py-2 text-white/80">
+                                {rate.manufacturer} {rate.model}
+                                {rate.variant && <span className="text-white/40 ml-1">{rate.variant}</span>}
+                              </td>
+                              <td className="px-3 py-2 text-white/60">{rate.term}m</td>
+                              <td className="px-3 py-2 text-white/60">{(rate.mileage / 1000).toFixed(0)}k</td>
+                              <td className="px-3 py-2 text-white/60">{rate.profile}</td>
+                              <td className="px-3 py-2 text-right text-[#79d5e9] font-medium">
+                                £{rate.monthly.toFixed(2)}
+                              </td>
+                              <td className="px-3 py-2 text-center">
+                                <span className={cn(
+                                  "px-1.5 py-0.5 rounded text-[10px]",
+                                  rate.maintained
+                                    ? "bg-green-500/20 text-green-400"
+                                    : "bg-gray-500/20 text-gray-400"
+                                )}>
+                                  {rate.contract}
+                                </span>
+                              </td>
+                            </tr>
+                          ))
+                        ) : (
+                          // Fall back to analysis preview (matrix format or initial detection)
+                          analysisResult.preview.slice(0, 10).map((rate, i) => (
+                            <tr key={i} className="hover:bg-white/5">
+                              <td className="px-3 py-2 text-white/80">
+                                {rate.manufacturer} {rate.model}
+                                {rate.variant && <span className="text-white/40 ml-1">{rate.variant}</span>}
+                              </td>
+                              <td className="px-3 py-2 text-white/60">{rate.term}m</td>
+                              <td className="px-3 py-2 text-white/60">{(rate.annualMileage / 1000).toFixed(0)}k</td>
+                              <td className="px-3 py-2 text-white/60">{rate.paymentProfile}</td>
+                              <td className="px-3 py-2 text-right text-[#79d5e9] font-medium">
+                                £{(rate.monthlyRental / 100).toFixed(2)}
+                              </td>
+                              <td className="px-3 py-2 text-center">
+                                <span className={cn(
+                                  "px-1.5 py-0.5 rounded text-[10px]",
+                                  rate.isMaintained
+                                    ? "bg-green-500/20 text-green-400"
+                                    : "bg-gray-500/20 text-gray-400"
+                                )}>
+                                  {rate.contractType}
+                                </span>
+                              </td>
+                            </tr>
+                          ))
+                        )}
                       </tbody>
                     </table>
                   </div>
-                  {analysisResult.preview.length > 10 && (
+                  {(previewData || analysisResult.preview).length > 10 && (
                     <p className="text-xs text-white/40 mt-2 text-center">
-                      + {analysisResult.preview.length - 10} more rates
+                      + {(previewData || analysisResult.preview).length - 10} more rates
                     </p>
                   )}
                 </div>
