@@ -42,32 +42,58 @@ export async function analyzeFile(
       preview = result.rates.slice(0, 20); // First 20 rates for preview
     }
   } else if (detection.format === "tabular") {
-    // For tabular, extract sample rows
+    // For tabular, extract sample rows using detected column mappings
     const buffer = typeof fileContent === "string"
       ? Buffer.from(fileContent, "base64")
       : fileContent;
     const wb = XLSX.read(buffer, { type: "buffer" });
 
     for (const analysis of detection.sheets) {
-      if (analysis.format === "tabular" && analysis.sampleData) {
-        // Convert sample data to ParsedRate format for preview
-        for (const row of analysis.sampleData.slice(0, 10)) {
+      if (analysis.format === "tabular" && analysis.columns && analysis.headerRow !== undefined) {
+        const ws = wb.Sheets[analysis.name];
+        if (!ws) continue;
+
+        const data = XLSX.utils.sheet_to_json<(string | number)[]>(ws, { header: 1 });
+
+        // Build column mapping from detected columns
+        const columnMap: Record<string, number> = {};
+        for (const col of analysis.columns) {
+          if (col.targetField) {
+            columnMap[col.targetField] = col.sourceColumn;
+          }
+        }
+
+        const getValue = (row: (string | number)[], field: string): string | number | null => {
+          const col = columnMap[field];
+          return col !== undefined ? row[col] : null;
+        };
+
+        // Process first 10 data rows for preview
+        for (let rowIdx = analysis.headerRow + 1; rowIdx < Math.min(analysis.headerRow + 11, data.length); rowIdx++) {
+          const row = data[rowIdx];
+          if (!row || row.every((c) => !c)) continue;
+
+          const rental = Number(getValue(row, "monthlyRental")) || 0;
+          if (rental <= 0) continue;
+
           preview.push({
-            manufacturer: String(row["MANUFACTURER"] || row["Make"] || "Unknown"),
-            model: String(row["MODEL"] || row["Model_Name"] || "Unknown"),
-            variant: String(row["VARIANT"] || row["VEHICLE DESCRIPTION"] || ""),
-            term: Number(row["TERM"] || row["Term"] || 36),
-            annualMileage: Number(row["ANNUAL_MILEAGE"] || row["Mileage"] || 10000),
+            manufacturer: String(getValue(row, "manufacturer") || "Unknown"),
+            model: String(getValue(row, "model") || "Unknown"),
+            variant: String(getValue(row, "variant") || ""),
+            term: Number(getValue(row, "term")) || 36,
+            annualMileage: Number(getValue(row, "annualMileage")) || 10000,
             initialMonths: 1,
             paymentProfile: "1+35",
             contractType: "BCH",
-            monthlyRental: Math.round(Number(row["NET RENTAL WM"] || row["Rental"] || 0) * 100),
+            monthlyRental: Math.round(rental * 100),
             isMaintained: true,
             sourceSheet: analysis.name,
-            sourceRow: 0,
+            sourceRow: rowIdx,
             sourceCol: 0,
-            capCode: String(row["CAP CODE"] || row["CAP_CODE"] || row["CAPcode"] || ""),
-            capId: String(row["CAP ID"] || row["CAPid"] || row["cap_id"] || ""),
+            capCode: String(getValue(row, "capCode") || ""),
+            capId: String(getValue(row, "capId") || ""),
+            otr: getValue(row, "otr") ? Math.round(Number(getValue(row, "otr")) * 100) : undefined,
+            p11d: getValue(row, "p11d") ? Math.round(Number(getValue(row, "p11d")) * 100) : undefined,
           });
         }
       }
@@ -83,7 +109,7 @@ export async function analyzeFile(
 export async function smartImport(
   options: SmartImportOptions
 ): Promise<SmartImportResult> {
-  const { fileName, fileContent, providerCode, contractType, userId, dryRun } = options;
+  const { fileName, fileContent, providerCode, contractType, userId, dryRun, columnMappings } = options;
 
   const buffer = typeof fileContent === "string"
     ? Buffer.from(fileContent, "base64")
@@ -145,6 +171,7 @@ export async function smartImport(
     result = await parseTabularWorkbook(buffer, detection, {
       providerCode,
       contractType,
+      columnMappings, // Pass custom column mappings
     });
   }
 
@@ -181,7 +208,7 @@ export async function smartImport(
 async function parseTabularWorkbook(
   buffer: Buffer,
   detection: DetectionResult,
-  options: { providerCode: string; contractType?: ContractType }
+  options: { providerCode: string; contractType?: ContractType; columnMappings?: Record<number, string> }
 ): Promise<SmartImportResult> {
   const wb = XLSX.read(buffer, { type: "buffer" });
   const rates: ParsedRate[] = [];
@@ -200,11 +227,19 @@ async function parseTabularWorkbook(
     const data = XLSX.utils.sheet_to_json<(string | number)[]>(ws, { header: 1 });
     const headerRow = analysis.headerRow;
 
-    // Build column mapping
+    // Build column mapping - use custom mappings if provided, otherwise use auto-detected
     const columnMap: Record<string, number> = {};
-    for (const col of analysis.columns) {
-      if (col.targetField) {
-        columnMap[col.targetField] = col.sourceColumn;
+    if (options.columnMappings) {
+      // Use custom mappings: { sourceColumn: targetField }
+      for (const [sourceCol, targetField] of Object.entries(options.columnMappings)) {
+        columnMap[targetField] = parseInt(sourceCol);
+      }
+    } else {
+      // Use auto-detected mappings
+      for (const col of analysis.columns) {
+        if (col.targetField) {
+          columnMap[col.targetField] = col.sourceColumn;
+        }
       }
     }
 

@@ -86,6 +86,10 @@ export interface ParsedRate {
   monthlyRental: number; // in pence
   isMaintained: boolean;
   otr?: number;
+  p11d?: number;
+  co2?: number;
+  fuelType?: string;
+  transmission?: string;
   quoteNumber?: string;
   sourceSheet: string;
   sourceRow: number;
@@ -112,6 +116,7 @@ export interface SmartImportOptions {
   contractType?: ContractType; // Override if known
   userId?: string;
   dryRun?: boolean; // Parse only, don't save to DB
+  columnMappings?: Record<number, string>; // Custom column mappings: sourceColumn -> targetField
 }
 
 // Common payment profile patterns

@@ -128,6 +128,14 @@ function StatusBadge({ status, hasErrors }: { status: string; hasErrors: boolean
   );
 }
 
+// Column mapping for the mapping step
+interface ColumnMappingItem {
+  sourceColumn: number;
+  sourceHeader: string;
+  targetField: string | null;
+  confidence: number;
+}
+
 // Analysis result types for smart import
 interface AnalysisResult {
   format: "tabular" | "matrix" | "unknown";
@@ -136,6 +144,8 @@ interface AnalysisResult {
   sheets: Array<{
     name: string;
     format: string;
+    headerRow?: number;
+    columns?: ColumnMappingItem[];
     vehicleInfo?: {
       manufacturer?: string;
       variant?: string;
@@ -174,8 +184,27 @@ function SmartImportModal({
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<ImportResult | null>(null);
   const [fileContent, setFileContent] = useState<string>("");
-  const [step, setStep] = useState<"upload" | "preview" | "result">("upload");
+  const [step, setStep] = useState<"upload" | "mapping" | "preview" | "result">("upload");
+  const [columnMappings, setColumnMappings] = useState<ColumnMappingItem[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Available target fields for column mapping
+  const TARGET_FIELDS = [
+    { value: "", label: "-- Skip this column --" },
+    { value: "capCode", label: "CAP Code", required: true },
+    { value: "capId", label: "CAP ID" },
+    { value: "manufacturer", label: "Manufacturer", required: true },
+    { value: "model", label: "Model" },
+    { value: "variant", label: "Variant / Description" },
+    { value: "term", label: "Term (months)", required: true },
+    { value: "annualMileage", label: "Annual Mileage", required: true },
+    { value: "monthlyRental", label: "Monthly Rental", required: true },
+    { value: "otr", label: "OTR Price" },
+    { value: "p11d", label: "P11D Value" },
+    { value: "co2", label: "CO2 Emissions" },
+    { value: "fuelType", label: "Fuel Type" },
+    { value: "transmission", label: "Transmission" },
+  ];
 
   const PROVIDERS = [
     { code: "ald", name: "ALD Automotive" },
@@ -232,8 +261,17 @@ function SmartImportModal({
 
       setAnalysisResult(data);
 
-      if (data.format === "matrix" || data.format === "tabular") {
-        // Both formats: show preview with detected rates
+      if (data.format === "tabular") {
+        // Tabular format: show column mapping step first
+        const firstSheet = data.sheets.find((s: { format: string }) => s.format === "tabular");
+        if (firstSheet?.columns) {
+          setColumnMappings(firstSheet.columns);
+          setStep("mapping");
+        } else {
+          setError("Could not detect column headers. Please check the file format.");
+        }
+      } else if (data.format === "matrix") {
+        // Matrix format: go directly to preview
         setStep("preview");
       } else {
         setError("Could not detect file format. Please ensure the file has recognizable headers or matrix structure.");
@@ -265,6 +303,15 @@ function SmartImportModal({
           contractType: contractType || undefined,
           action: "import",
           dryRun: false,
+          // Pass custom column mappings for tabular format
+          columnMappings: columnMappings.length > 0
+            ? columnMappings.reduce((acc, m) => {
+                if (m.targetField) {
+                  acc[m.sourceColumn] = m.targetField;
+                }
+                return acc;
+              }, {} as Record<number, string>)
+            : undefined,
         }),
       });
 
@@ -301,7 +348,42 @@ function SmartImportModal({
     setResult(null);
     setFileContent("");
     setAnalysisResult(null);
+    setColumnMappings([]);
     setStep("upload");
+  };
+
+  const handleMappingChange = (sourceColumn: number, newTargetField: string) => {
+    setColumnMappings((prev) =>
+      prev.map((m) =>
+        m.sourceColumn === sourceColumn
+          ? { ...m, targetField: newTargetField || null, confidence: 100 }
+          : m
+      )
+    );
+  };
+
+  const handleProceedToPreview = () => {
+    // Validate required fields are mapped
+    const mappedFields = columnMappings.filter((m) => m.targetField).map((m) => m.targetField);
+    const requiredFields = ["capCode", "manufacturer", "term", "annualMileage", "monthlyRental"];
+    const missingRequired = requiredFields.filter((f) => !mappedFields.includes(f));
+
+    // capCode OR capId is required
+    if (!mappedFields.includes("capCode") && !mappedFields.includes("capId")) {
+      setError("You must map either CAP Code or CAP ID column");
+      return;
+    }
+
+    // Check other required fields (excluding capCode since we allow capId)
+    const otherRequired = requiredFields.filter((f) => f !== "capCode");
+    const otherMissing = otherRequired.filter((f) => !mappedFields.includes(f));
+    if (otherMissing.length > 0) {
+      setError(`Missing required mappings: ${otherMissing.join(", ")}`);
+      return;
+    }
+
+    setError(null);
+    setStep("preview");
   };
 
   const handleClose = () => {
@@ -335,6 +417,7 @@ function SmartImportModal({
                 <h2 className="text-lg font-semibold text-white">Smart Import</h2>
                 <p className="text-sm text-gray-500">
                   {step === "upload" && "Auto-detects tabular and matrix formats"}
+                  {step === "mapping" && "Review column mappings"}
                   {step === "preview" && analysisResult && `Detected ${analysisResult.format} format`}
                   {step === "result" && "Import complete"}
                 </p>
@@ -442,6 +525,137 @@ function SmartImportModal({
               </>
             )}
 
+            {step === "mapping" && columnMappings.length > 0 && (
+              <>
+                {/* Description */}
+                <div className="p-4 rounded-lg bg-gradient-to-r from-blue-500/10 to-cyan-500/10 border border-blue-500/20 mb-4">
+                  <p className="text-sm text-white/70">
+                    Review and adjust the column mappings below. Fields marked with <span className="text-red-400">*</span> are required.
+                  </p>
+                </div>
+
+                {/* File Info */}
+                <div className="flex items-center gap-2 mb-4 text-sm text-white/60">
+                  <FileSpreadsheet className="w-4 h-4" />
+                  <span>{file?.name}</span>
+                  <span className="text-white/30">•</span>
+                  <span>{columnMappings.length} columns detected</span>
+                </div>
+
+                {/* Column Mapping Table */}
+                <div className="overflow-x-auto rounded-lg border border-white/10 mb-4">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="bg-white/5">
+                        <th className="px-3 py-2 text-left text-white/50 font-medium">#</th>
+                        <th className="px-3 py-2 text-left text-white/50 font-medium">Source Column</th>
+                        <th className="px-3 py-2 text-center text-white/30 font-medium">→</th>
+                        <th className="px-3 py-2 text-left text-white/50 font-medium">Map To Field</th>
+                        <th className="px-3 py-2 text-center text-white/50 font-medium">Match</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/5">
+                      {columnMappings.map((mapping) => {
+                        const targetField = TARGET_FIELDS.find((f) => f.value === mapping.targetField);
+                        return (
+                          <tr key={mapping.sourceColumn} className="hover:bg-white/5">
+                            <td className="px-3 py-2 text-white/40 text-xs">{mapping.sourceColumn + 1}</td>
+                            <td className="px-3 py-2 text-white/80 font-mono text-xs">
+                              {mapping.sourceHeader}
+                            </td>
+                            <td className="px-3 py-2 text-center text-white/30">→</td>
+                            <td className="px-3 py-2">
+                              <select
+                                value={mapping.targetField || ""}
+                                onChange={(e) => handleMappingChange(mapping.sourceColumn, e.target.value)}
+                                className={cn(
+                                  "w-full px-2 py-1.5 rounded text-xs bg-[#1a1f2a] border focus:outline-none focus:ring-1 focus:ring-blue-500/50",
+                                  mapping.targetField
+                                    ? "border-blue-500/30 text-white"
+                                    : "border-gray-700 text-white/50"
+                                )}
+                              >
+                                {TARGET_FIELDS.map((field) => (
+                                  <option key={field.value} value={field.value}>
+                                    {field.label}
+                                    {field.required ? " *" : ""}
+                                  </option>
+                                ))}
+                              </select>
+                            </td>
+                            <td className="px-3 py-2 text-center">
+                              {mapping.targetField && (
+                                <span
+                                  className={cn(
+                                    "inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px]",
+                                    mapping.confidence >= 90
+                                      ? "bg-green-500/20 text-green-400"
+                                      : mapping.confidence >= 70
+                                      ? "bg-yellow-500/20 text-yellow-400"
+                                      : "bg-blue-500/20 text-blue-400"
+                                  )}
+                                >
+                                  {mapping.confidence}%
+                                </span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Required Fields Summary */}
+                <div className="p-3 rounded-lg bg-white/5 border border-white/10 mb-4">
+                  <p className="text-xs text-white/40 mb-2">Required fields:</p>
+                  <div className="flex flex-wrap gap-2">
+                    {TARGET_FIELDS.filter((f) => f.required).map((field) => {
+                      const isMapped = columnMappings.some((m) => m.targetField === field.value);
+                      return (
+                        <span
+                          key={field.value}
+                          className={cn(
+                            "px-2 py-1 rounded text-xs",
+                            isMapped
+                              ? "bg-green-500/20 text-green-400 border border-green-500/30"
+                              : "bg-red-500/20 text-red-400 border border-red-500/30"
+                          )}
+                        >
+                          {isMapped ? "✓" : "✗"} {field.label}
+                        </span>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Error */}
+                {error && (
+                  <div className="mb-4 px-4 py-3 rounded-lg text-sm text-red-400 flex items-center gap-2 bg-red-500/10">
+                    <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                    {error}
+                  </div>
+                )}
+
+                {/* Actions */}
+                <div className="flex justify-end gap-3 pt-4 border-t border-white/10">
+                  <button
+                    onClick={handleReset}
+                    className="px-4 py-2 rounded-lg text-sm font-medium text-white/70 hover:text-white hover:bg-white/10 transition-colors"
+                  >
+                    Back
+                  </button>
+                  <button
+                    onClick={handleProceedToPreview}
+                    className="px-6 py-2 rounded-lg text-sm font-medium text-white flex items-center gap-2 transition-all"
+                    style={{ background: "linear-gradient(135deg, #3b82f6 0%, #06b6d4 100%)" }}
+                  >
+                    Continue to Preview
+                  </button>
+                </div>
+              </>
+            )}
+
             {step === "preview" && analysisResult && (
               <>
                 {/* Format Detection Badge */}
@@ -457,6 +671,14 @@ function SmartImportModal({
                   <span className="text-xs text-white/40">
                     {analysisResult.confidence}% confidence
                   </span>
+                  {analysisResult.format === "tabular" && (
+                    <button
+                      onClick={() => setStep("mapping")}
+                      className="text-xs text-blue-400 hover:text-blue-300 underline"
+                    >
+                      Edit mappings
+                    </button>
+                  )}
                 </div>
 
                 {/* Sheets Info */}

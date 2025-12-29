@@ -38,6 +38,7 @@ export async function POST(req: NextRequest) {
       contractType,
       action = "analyze",
       dryRun = false,
+      columnMappings,
     } = body as {
       fileName: string;
       fileContent: string;
@@ -45,6 +46,7 @@ export async function POST(req: NextRequest) {
       contractType?: ContractType;
       action?: "analyze" | "import";
       dryRun?: boolean;
+      columnMappings?: Record<number, string>; // sourceColumn -> targetField
     };
 
     if (!fileName || !fileContent) {
@@ -88,6 +90,13 @@ export async function POST(req: NextRequest) {
               }
             : undefined,
           columnCount: sheet.columns?.length || 0,
+          // Include detected column mappings for tabular format
+          columns: sheet.columns?.map((col) => ({
+            sourceColumn: col.sourceColumn,
+            sourceHeader: col.sourceHeader,
+            targetField: col.targetField,
+            confidence: col.confidence,
+          })),
         })),
         preview: result.preview.slice(0, 20),
         totalPreviewRates: result.preview.length,
@@ -102,6 +111,7 @@ export async function POST(req: NextRequest) {
       contractType,
       userId: session.user.id,
       dryRun,
+      columnMappings,
     });
 
     return NextResponse.json({
