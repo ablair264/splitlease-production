@@ -48,3 +48,7 @@ scrape.html
 railway.json
 tests/
 scripts/
+
+# Vehicle images and 3D models
+vehicle-images/
+3d-models/
