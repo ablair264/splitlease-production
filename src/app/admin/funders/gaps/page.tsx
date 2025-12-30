@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { CoverageGapTable } from "@/components/admin/funders/CoverageGapTable";
+import { CoverageGapTable, RateRequestExport } from "@/components/admin/funders";
 
 export const metadata = {
   title: "Funder Coverage Gaps | Admin",
@@ -25,7 +25,10 @@ export default async function CoverageGapsPage() {
         </div>
       </div>
 
-      {/* Table */}
+      {/* Rate Request Export */}
+      <RateRequestExport />
+
+      {/* Coverage Gap Table */}
       <CoverageGapTable />
     </div>
   );

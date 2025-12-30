@@ -31,10 +31,33 @@ export function ViewSelector({ onApplyView, refreshTrigger }: ViewSelectorProps)
         const data = await response.json();
         setViews(data.views || []);
 
-        // Select default view if exists
+        // Select and APPLY default view if exists
         const defaultView = data.views?.find((v: UserView) => v.isDefault);
         if (defaultView && !selectedViewId) {
           setSelectedViewId(defaultView.id);
+          // Auto-apply the default view
+          const defaultFilters: TableFilters = {
+            search: "",
+            manufacturers: [],
+            fuelTypes: [],
+            priceMin: null,
+            priceMax: null,
+            scoreMin: 0,
+            scoreMax: 100,
+            ageMax: null,
+            specialOfferOnly: false,
+            enabledOnly: false,
+            vehicleCategory: "all",
+          };
+          onApplyView({
+            columnOrder: defaultView.columnOrder || [],
+            columnVisibility: defaultView.columnVisibility || {},
+            filters: defaultView.filters ? { ...defaultFilters, ...defaultView.filters } as TableFilters : defaultFilters,
+            sort: {
+              field: defaultView.sortBy || "bestScore",
+              order: (defaultView.sortOrder as "asc" | "desc") || "desc",
+            },
+          });
         }
       }
     } catch (error) {

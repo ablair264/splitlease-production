@@ -21,6 +21,9 @@ import {
   FileSpreadsheet,
   Menu,
   X,
+  BarChart3,
+  Target,
+  TrendingUp,
   type LucideIcon,
 } from "lucide-react";
 import type { User } from "next-auth";
@@ -52,6 +55,7 @@ const navigation: NavSection[] = [
       { name: "Dashboard", href: "/admin/dashboard", icon: LayoutDashboard },
       { name: "Rate Explorer", href: "/admin/rates", icon: Search },
       { name: "Deal Finder", href: "/admin/deals", icon: Sparkles },
+      { name: "Offer Queue", href: "/admin/deals/queue", icon: Target },
       { name: "OTR Calculator", href: "/admin/otr-calculator", icon: Calculator },
       { name: "Import Manager", href: "/admin/imports", icon: Upload },
       { name: "Scoring Config", href: "/admin/scoring", icon: Sliders },
@@ -66,6 +70,16 @@ const navigation: NavSection[] = [
       { name: "Ogilvie Fleet", href: "/admin/ogilvie", icon: Building2 },
       { name: "Rate Uploader", href: "/admin/uploader", icon: FileSpreadsheet },
       { name: "Terms Holders", href: "/admin/fleet-marque", icon: FileSpreadsheet },
+      { name: "Coverage Gaps", href: "/admin/funders/gaps", icon: Target },
+      { name: "Funder Performance", href: "/admin/funders/performance", icon: BarChart3 },
+    ],
+  },
+  {
+    name: "intelligence",
+    label: "INTELLIGENCE",
+    items: [
+      { name: "Market Position", href: "/admin/market-position", icon: TrendingUp },
+      { name: "Price Alerts", href: "/admin/alerts", icon: Target },
     ],
   },
   {

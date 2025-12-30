@@ -3,6 +3,8 @@ export { DealCardGrid } from "./DealCardGrid";
 export { DealFilters } from "./DealFilters";
 export { DealFinder } from "./DealFinder";
 export { DealHeatmapTable } from "./DealHeatmapTable";
+export { OfferPerformance } from "./OfferPerformance";
 export { OfferQueue } from "./OfferQueue";
+export { SmartSuggestions } from "./SmartSuggestions";
 export { UnifiedDealFinder } from "./UnifiedDealFinder";
 export * from "./types";
