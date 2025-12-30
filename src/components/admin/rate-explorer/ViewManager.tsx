@@ -3,6 +3,8 @@
 import { useState, useMemo } from "react";
 import { X, GripVertical, Eye, EyeOff, Save, Plus } from "lucide-react";
 import type { VisibilityState, ColumnOrderState } from "@tanstack/react-table";
+import { SaveViewDialog } from "./SaveViewDialog";
+import type { TableFilters, SortState } from "./types";
 
 interface ViewManagerProps {
   columnVisibility: VisibilityState;
@@ -10,6 +12,9 @@ interface ViewManagerProps {
   columnOrder: ColumnOrderState;
   onColumnOrderChange: (order: ColumnOrderState) => void;
   onClose: () => void;
+  filters: TableFilters;
+  sort: SortState;
+  onViewSaved?: () => void;
 }
 
 // All available columns with labels
@@ -40,8 +45,12 @@ export function ViewManager({
   columnOrder,
   onColumnOrderChange,
   onClose,
+  filters,
+  sort,
+  onViewSaved,
 }: ViewManagerProps) {
   const [draggedColumn, setDraggedColumn] = useState<string | null>(null);
+  const [showSaveDialog, setShowSaveDialog] = useState(false);
 
   // Get columns in current order and available columns not in order
   const { orderedColumns, availableColumns } = useMemo(() => {
@@ -185,9 +194,10 @@ export function ViewManager({
         </div>
       )}
 
-      {/* Save view button placeholder */}
+      {/* Save view button */}
       <div className="mt-4 pt-4 border-t border-white/10">
         <button
+          onClick={() => setShowSaveDialog(true)}
           className="w-full flex items-center justify-center gap-2 px-4 py-2 rounded-lg
             bg-cyan-500/20 text-cyan-400 hover:bg-cyan-500/30
             transition-all duration-200"
@@ -196,6 +206,19 @@ export function ViewManager({
           Save as Custom View
         </button>
       </div>
+
+      {/* Save View Dialog */}
+      <SaveViewDialog
+        isOpen={showSaveDialog}
+        onClose={() => setShowSaveDialog(false)}
+        onSaved={() => {
+          onViewSaved?.();
+        }}
+        columnOrder={columnOrder}
+        columnVisibility={columnVisibility}
+        filters={filters}
+        sort={sort}
+      />
     </div>
   );
 }

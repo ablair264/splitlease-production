@@ -11,10 +11,11 @@ import {
   Eye,
   MoreVertical,
 } from "lucide-react";
-import type { TableFilters, FilterOptions, VehicleCategory } from "./types";
+import type { TableFilters, FilterOptions, VehicleCategory, SortState } from "./types";
 import type { VisibilityState, ColumnOrderState } from "@tanstack/react-table";
 import { FilterBuilder } from "./FilterBuilder";
 import { ViewManager } from "./ViewManager";
+import { ViewSelector } from "./ViewSelector";
 
 interface RateExplorerToolbarProps {
   filters: TableFilters;
@@ -29,6 +30,14 @@ interface RateExplorerToolbarProps {
   onExport: (format: "csv" | "xlsx") => void;
   showMaintenance: boolean;
   onShowMaintenanceChange: (show: boolean) => void;
+  sort: SortState;
+  onSortChange: (sort: SortState) => void;
+  onApplyView: (view: {
+    columnOrder: ColumnOrderState;
+    columnVisibility: VisibilityState;
+    filters: TableFilters;
+    sort: SortState;
+  }) => void;
 }
 
 export function RateExplorerToolbar({
@@ -44,10 +53,14 @@ export function RateExplorerToolbar({
   onExport,
   showMaintenance,
   onShowMaintenanceChange,
+  sort,
+  onSortChange,
+  onApplyView,
 }: RateExplorerToolbarProps) {
   const [showFilters, setShowFilters] = useState(false);
   const [showViewManager, setShowViewManager] = useState(false);
   const [showExportMenu, setShowExportMenu] = useState(false);
+  const [viewRefreshTrigger, setViewRefreshTrigger] = useState(0);
 
   // Count active filters
   const activeFilterCount = [
@@ -183,6 +196,12 @@ export function RateExplorerToolbar({
 
         {/* Right side */}
         <div className="flex items-center gap-3">
+          {/* Saved views selector */}
+          <ViewSelector
+            onApplyView={onApplyView}
+            refreshTrigger={viewRefreshTrigger}
+          />
+
           {/* View button */}
           <button
             onClick={() => setShowViewManager(!showViewManager)}
@@ -196,7 +215,7 @@ export function RateExplorerToolbar({
             `}
           >
             <Eye className="w-4 h-4" />
-            <span>View</span>
+            <span>Columns</span>
           </button>
 
           {/* Export menu */}
@@ -273,6 +292,9 @@ export function RateExplorerToolbar({
           columnOrder={columnOrder}
           onColumnOrderChange={onColumnOrderChange}
           onClose={() => setShowViewManager(false)}
+          filters={filters}
+          sort={sort}
+          onViewSaved={() => setViewRefreshTrigger((prev) => prev + 1)}
         />
       )}
     </>

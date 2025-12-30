@@ -39,10 +39,8 @@ const footerLinks = {
     { label: "Pickup Trucks", href: "/vans?bodyType=pickup" },
   ],
   leasing: [
-    { label: "What is Leasing?", href: "/leasing/how-it-works" },
-    { label: "Business vs Personal", href: "/leasing/business-vs-personal" },
-    { label: "Lease Calculator", href: "/calculator" },
-    { label: "End of Lease", href: "/leasing/end-of-lease" },
+    { label: "Personal Leasing Guide", href: "/leasing/personal" },
+    { label: "Business Leasing Guide", href: "/leasing/business" },
     { label: "FAQs", href: "/faqs" },
   ],
   company: [

@@ -119,32 +119,23 @@ const vansMegaMenu: MegaMenuSection[] = [
 // What is Leasing mega menu
 const leasingMegaMenu: MegaMenuSection[] = [
   {
-    title: "Understanding Leasing",
+    title: "Guides",
     items: [
       {
-        label: "How Car Leasing Works",
-        href: "/leasing/how-it-works",
-        description: "A complete guide to vehicle leasing",
+        label: "Personal Leasing Guide",
+        href: "/leasing/personal",
+        description: "Learn how personal car leasing works",
       },
       {
-        label: "Business vs Personal",
-        href: "/leasing/business-vs-personal",
-        description: "Which option is right for you?",
+        label: "Business Leasing Guide",
+        href: "/leasing/business",
+        description: "Compare business leasing options",
       },
       {
-        label: "Lease Calculator",
-        href: "/calculator",
-        description: "Estimate your monthly payments",
+        label: "FAQs",
+        href: "/faqs",
+        description: "Answers to common leasing questions",
       },
-    ],
-  },
-  {
-    title: "FAQs",
-    items: [
-      { label: "What is included?", href: "/leasing/whats-included" },
-      { label: "End of lease options", href: "/leasing/end-of-lease" },
-      { label: "Mileage explained", href: "/leasing/mileage" },
-      { label: "All FAQs", href: "/faqs" },
     ],
   },
 ];

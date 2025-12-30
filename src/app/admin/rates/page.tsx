@@ -162,6 +162,19 @@ export default function RateExplorerPage() {
     toggleEnabledMutation.mutate({ vehicleId, enabled });
   }, [toggleEnabledMutation]);
 
+  // Handle applying a saved view
+  const handleApplyView = useCallback((view: {
+    columnOrder: string[];
+    columnVisibility: Record<string, boolean>;
+    filters: TableFilters;
+    sort: SortState;
+  }) => {
+    // Update filters and sort from the saved view
+    setFilters(view.filters);
+    setSort(view.sort);
+    setPage(1); // Reset to first page when applying a view
+  }, []);
+
   // Handle export
   const handleExport = useCallback(async (format: "csv" | "xlsx") => {
     // Build export URL with current filters
@@ -219,6 +232,7 @@ export default function RateExplorerPage() {
           onToggleSpecialOffer={handleToggleSpecialOffer}
           onToggleEnabled={handleToggleEnabled}
           onExport={handleExport}
+          onApplyView={handleApplyView}
         />
       </div>
     </div>

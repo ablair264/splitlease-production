@@ -33,6 +33,12 @@ interface RateExplorerTableProps {
   onToggleSpecialOffer: (vehicleId: string, isSpecialOffer: boolean) => void;
   onToggleEnabled: (vehicleId: string, enabled: boolean) => void;
   onExport: (format: "csv" | "xlsx") => void;
+  onApplyView: (view: {
+    columnOrder: string[];
+    columnVisibility: Record<string, boolean>;
+    filters: TableFilters;
+    sort: SortState;
+  }) => void;
 }
 
 export function RateExplorerTable({
@@ -48,6 +54,7 @@ export function RateExplorerTable({
   onToggleSpecialOffer,
   onToggleEnabled,
   onExport,
+  onApplyView,
 }: RateExplorerTableProps) {
   // Table state
   const [sorting, setSorting] = useState<SortingState>([
@@ -236,6 +243,19 @@ export function RateExplorerTable({
         onExport={onExport}
         showMaintenance={showMaintenance}
         onShowMaintenanceChange={setShowMaintenance}
+        sort={sort}
+        onSortChange={onSortChange}
+        onApplyView={(view) => {
+          // Apply column settings to internal state
+          if (view.columnOrder.length > 0) {
+            setColumnOrder(view.columnOrder);
+          }
+          if (Object.keys(view.columnVisibility).length > 0) {
+            setColumnVisibility(view.columnVisibility);
+          }
+          // Propagate filters and sort to parent
+          onApplyView(view);
+        }}
       />
 
       {/* Table */}
