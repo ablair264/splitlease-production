@@ -170,10 +170,13 @@ export const MILEAGE_BANDS = [
 ] as const;
 
 // Known column header patterns for tabular format
+// NOTE: Order matters for substring matching - more specific patterns should come first
 export const TABULAR_HEADER_PATTERNS: Record<string, string[]> = {
   capCode: ["cap_code", "capcode", "cap code", "cap-code", "lookup_code", "lookupcode"],
   capId: ["cap_id", "capid", "cap id", "cap-id", "dataoriginatorcode"],
   manufacturer: ["manufacturer", "make", "brand", "oem"],
+  // modelYear must be checked BEFORE model to avoid "modelyear" matching "model"
+  modelYear: ["modelyear", "model_year", "model year", "year"],
   model: ["model", "model_name", "modelname", "range"],
   variant: ["variant", "derivative", "vehicle description", "vehicledescription", "trim"],
   term: ["term", "contract_term", "contractterm", "months", "duration"],

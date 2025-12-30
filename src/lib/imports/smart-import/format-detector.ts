@@ -143,19 +143,51 @@ function detectTabular(
     let matchedHeaders = 0;
 
     for (let colIdx = 0; colIdx < row.length; colIdx++) {
-      const cellValue = String(row[colIdx] || "").toLowerCase().trim();
+      const cellValue = String(row[colIdx] || "").toLowerCase().trim().replace(/[\s_-]+/g, "");
       if (!cellValue) continue;
 
-      // Check against known header patterns
-      for (const [field, patterns] of Object.entries(TABULAR_HEADER_PATTERNS)) {
-        if (patterns.some((p) => cellValue.includes(p) || p.includes(cellValue))) {
+      // Check against known header patterns with priority ordering
+      // More specific patterns (like modelyear) must be checked before general ones (like model)
+      const orderedFields = [
+        "modelYear", // Check before "model" to avoid "modelyear" matching "model"
+        "annualMileage", // Check before generic patterns
+        "monthlyRental",
+        ...Object.keys(TABULAR_HEADER_PATTERNS).filter(
+          (f) => !["modelYear", "annualMileage", "monthlyRental"].includes(f)
+        ),
+      ];
+
+      let matched = false;
+      for (const field of orderedFields) {
+        const patterns = TABULAR_HEADER_PATTERNS[field];
+        if (!patterns) continue;
+
+        // Normalize patterns for comparison
+        const normalizedPatterns = patterns.map((p) => p.toLowerCase().replace(/[\s_-]+/g, ""));
+
+        // Check for exact match first (highest confidence)
+        if (normalizedPatterns.includes(cellValue)) {
           mappings.push({
             sourceColumn: colIdx,
             sourceHeader: String(row[colIdx]),
             targetField: field,
-            confidence: cellValue === patterns[0] ? 100 : 80,
+            confidence: 100,
           });
           matchedHeaders++;
+          matched = true;
+          break;
+        }
+
+        // Then check for substring match (lower confidence)
+        if (normalizedPatterns.some((p) => cellValue === p || (p.length >= 4 && cellValue.includes(p)))) {
+          mappings.push({
+            sourceColumn: colIdx,
+            sourceHeader: String(row[colIdx]),
+            targetField: field,
+            confidence: 75,
+          });
+          matchedHeaders++;
+          matched = true;
           break;
         }
       }
