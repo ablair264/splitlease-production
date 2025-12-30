@@ -303,13 +303,18 @@ export default async function handler(req: Request, context: Context) {
   const sql = neon(databaseUrl);
   const results: FetchResult[] = [];
 
-  // Helper to store deals
+  // Helper to store deals (limited to top 30 per source to avoid timeout)
   async function storeDeals(source: string, deals: ParsedDeal[]) {
-    const validDeals = deals.filter(d => d.manufacturer && d.model && d.monthlyPrice);
+    const validDeals = deals
+      .filter(d => d.manufacturer && d.model && d.monthlyPrice)
+      .sort((a, b) => (a.monthlyPrice || 0) - (b.monthlyPrice || 0)) // Sort by price ascending
+      .slice(0, 30); // Take top 30 cheapest deals
+
     if (validDeals.length === 0) {
       console.log(`[Scrape Competitors] ${source}: no valid deals found`);
       return 0;
     }
+    console.log(`[Scrape Competitors] ${source}: storing top ${validDeals.length} deals`);
 
     const prices = validDeals.map(d => Math.round(d.monthlyPrice! * 100));
     const avgPrice = Math.round(prices.reduce((a, b) => a + b, 0) / prices.length);
