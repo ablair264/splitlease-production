@@ -5,8 +5,6 @@ import { cn } from "@/lib/utils";
 import {
   Upload,
   RefreshCw,
-  Globe,
-  FileText,
   Search,
   CheckCircle2,
   AlertCircle,
@@ -32,13 +30,6 @@ interface Import {
   createdAt: string;
 }
 
-interface QuickActionCardProps {
-  icon: React.ReactNode;
-  title: string;
-  subtitle: string;
-  onClick: () => void;
-  highlight?: boolean;
-}
 
 interface ImportResult {
   success: boolean;
@@ -54,37 +45,6 @@ const CONTRACT_TYPES = [
   { value: "BSSNL", label: "Salary Sacrifice" },
 ];
 
-// Quick Action Card Component
-function QuickActionCard({ icon, title, subtitle, onClick, highlight }: QuickActionCardProps) {
-  return (
-    <button
-      onClick={onClick}
-      className={cn(
-        "flex-1 border rounded-xl p-5 text-left transition-all group",
-        highlight
-          ? "bg-gradient-to-br from-purple-500/10 to-indigo-500/10 border-purple-500/30 hover:border-purple-500/50"
-          : "bg-[#161c24] border-gray-800 hover:border-[#79d5e9]/30 hover:bg-[#79d5e9]/5"
-      )}
-    >
-      <div className="flex items-start gap-4">
-        <div
-          className={cn(
-            "p-3 rounded-lg transition-colors",
-            highlight
-              ? "bg-purple-500/20 text-purple-400 group-hover:bg-purple-500/30"
-              : "bg-[#79d5e9]/10 text-[#79d5e9] group-hover:bg-[#79d5e9]/20"
-          )}
-        >
-          {icon}
-        </div>
-        <div>
-          <h3 className="font-medium text-white">{title}</h3>
-          <p className="text-sm text-gray-500 mt-1">{subtitle}</p>
-        </div>
-      </div>
-    </button>
-  );
-}
 
 // Status Badge Component
 function StatusBadge({ status, hasErrors }: { status: string; hasErrors: boolean }) {
@@ -1050,39 +1010,38 @@ export default function ImportManagerPage() {
   const fetchImports = useCallback(async () => {
     try {
       setIsLoading(true);
-      const response = await fetch("/api/admin/dashboard/stats");
+      // Build query params
+      const params = new URLSearchParams();
+      if (filters.source !== "all") params.set("source", filters.source);
+      if (filters.status !== "all") params.set("status", filters.status);
+      if (filters.dateRange !== "all") params.set("days", filters.dateRange);
+
+      const response = await fetch(`/api/admin/imports?${params}`);
       if (response.ok) {
         const data = await response.json();
-        setImports(data.recentImports || []);
+        setImports(data.imports || []);
       }
     } catch (error) {
       console.error("Failed to fetch imports:", error);
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [filters.source, filters.status, filters.dateRange]);
 
   useEffect(() => {
     fetchImports();
   }, [fetchImports]);
 
-  // Filter imports
-  const filteredImports = imports.filter((imp) => {
-    if (filters.source !== "all" && imp.providerCode.toLowerCase() !== filters.source) {
-      return false;
-    }
-    if (filters.status !== "all" && imp.status !== filters.status) {
-      return false;
-    }
-    if (filters.search) {
-      const search = filters.search.toLowerCase();
-      return (
-        imp.providerCode.toLowerCase().includes(search) ||
-        imp.contractType.toLowerCase().includes(search)
-      );
-    }
-    return true;
-  });
+  // Client-side search filter only (server handles source, status, dateRange)
+  const filteredImports = filters.search
+    ? imports.filter((imp) => {
+        const search = filters.search.toLowerCase();
+        return (
+          imp.providerCode.toLowerCase().includes(search) ||
+          imp.contractType.toLowerCase().includes(search)
+        );
+      })
+    : imports;
 
   return (
     <div className="space-y-6">
@@ -1102,41 +1061,6 @@ export default function ImportManagerPage() {
           <Sparkles className="w-4 h-4" />
           New Import
         </button>
-      </div>
-
-      {/* Quick Actions */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <QuickActionCard
-          icon={<Sparkles className="w-5 h-5" />}
-          title="Smart Import"
-          subtitle="AI-powered mapping"
-          onClick={() => setShowSmartImport(true)}
-          highlight
-        />
-        <QuickActionCard
-          icon={<RefreshCw className="w-5 h-5" />}
-          title="Lex Session Sync"
-          subtitle="Auto-fetch quotes"
-          onClick={() => {
-            window.location.href = "/admin/lex-autolease";
-          }}
-        />
-        <QuickActionCard
-          icon={<Globe className="w-5 h-5" />}
-          title="Ogilvie Scrape"
-          subtitle="Export from portal"
-          onClick={() => {
-            window.location.href = "/admin/ogilvie";
-          }}
-        />
-        <QuickActionCard
-          icon={<FileText className="w-5 h-5" />}
-          title="Drivalia Quotes"
-          subtitle="Run quotes"
-          onClick={() => {
-            window.location.href = "/admin/drivalia";
-          }}
-        />
       </div>
 
       {/* Import History */}
