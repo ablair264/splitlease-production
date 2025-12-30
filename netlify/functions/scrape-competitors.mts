@@ -307,8 +307,7 @@ export default async function handler(req: Request, context: Context) {
   async function storeDeals(source: string, deals: ParsedDeal[]) {
     const validDeals = deals
       .filter(d => d.manufacturer && d.model && d.monthlyPrice)
-      .sort((a, b) => (a.monthlyPrice || 0) - (b.monthlyPrice || 0)) // Sort by price ascending
-      .slice(0, 30); // Take top 30 cheapest deals
+      .slice(0, 30); // Keep original website ordering, limit to 30
 
     if (validDeals.length === 0) {
       console.log(`[Scrape Competitors] ${source}: no valid deals found`);
