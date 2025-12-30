@@ -181,8 +181,64 @@ export async function smartImport(
     });
   }
 
-  // If dry run, return without saving
+  // If dry run, still do vehicle lookup for preview but don't save
   if (dryRun) {
+    // Collect all CAP codes/IDs for vehicle lookup
+    const capCodes = [...new Set(result.rates.map((r) => r.capCode).filter(Boolean))] as string[];
+    const capIds = [...new Set(result.rates.map((r) => r.capId).filter(Boolean))] as string[];
+
+    // Look up vehicles to enrich preview with clean data
+    const vehicleMap = new Map<string, { manufacturer: string; model: string; variant: string | null }>();
+
+    if (capCodes.length > 0) {
+      const vehiclesByCode = await db
+        .select({
+          capCode: vehicles.capCode,
+          manufacturer: vehicles.manufacturer,
+          model: vehicles.model,
+          variant: vehicles.variant,
+        })
+        .from(vehicles)
+        .where(inArray(vehicles.capCode, capCodes));
+
+      for (const v of vehiclesByCode) {
+        if (v.capCode) vehicleMap.set(v.capCode, v);
+      }
+    }
+
+    if (capIds.length > 0) {
+      const vehiclesById = await db
+        .select({
+          capId: vehicles.capId,
+          manufacturer: vehicles.manufacturer,
+          model: vehicles.model,
+          variant: vehicles.variant,
+        })
+        .from(vehicles)
+        .where(inArray(vehicles.capId, capIds));
+
+      for (const v of vehiclesById) {
+        if (v.capId) vehicleMap.set(v.capId, v);
+      }
+    }
+
+    // Enrich rates with vehicle data for preview
+    result.rates = result.rates.map((rate) => {
+      const vehicleData = (rate.capCode && vehicleMap.get(rate.capCode)) ||
+        (rate.capId && vehicleMap.get(rate.capId)) ||
+        null;
+
+      if (vehicleData) {
+        return {
+          ...rate,
+          manufacturer: vehicleData.manufacturer,
+          model: vehicleData.model,
+          variant: vehicleData.variant || rate.variant,
+        };
+      }
+      return rate;
+    });
+
     return result;
   }
 
