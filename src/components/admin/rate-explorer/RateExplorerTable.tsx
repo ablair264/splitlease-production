@@ -66,6 +66,9 @@ export function RateExplorerTable({
     row: VehicleTableRow;
   } | null>(null);
 
+  // Image download state
+  const [downloadingVehicles, setDownloadingVehicles] = useState<Set<string>>(new Set());
+
   // Create columns with callbacks
   const columns = useMemo(
     () =>
@@ -134,6 +137,44 @@ export function RateExplorerTable({
   const closeContextMenu = useCallback(() => {
     setContextMenu(null);
   }, []);
+
+  // Handle image download
+  const handleDownloadImages = useCallback(async (vehicleId: string) => {
+    // Add to downloading set
+    setDownloadingVehicles((prev) => new Set(prev).add(vehicleId));
+
+    try {
+      const response = await fetch(`/api/admin/vehicles/${vehicleId}/download-images`, {
+        method: "POST",
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        // Show success notification (could add toast here)
+        console.log(
+          `[Download Images] Success for ${result.vehicle.manufacturer} ${result.vehicle.model}: ${result.summary.uploaded}/${result.summary.total} images`
+        );
+        alert(
+          `Downloaded ${result.summary.uploaded}/${result.summary.total} images for ${result.vehicle.manufacturer} ${result.vehicle.model}`
+        );
+      } else {
+        console.error("[Download Images] Failed:", result.error);
+        alert(`Failed to download images: ${result.error}`);
+      }
+    } catch (error) {
+      console.error("[Download Images] Error:", error);
+      alert(`Error downloading images: ${error instanceof Error ? error.message : "Unknown error"}`);
+    } finally {
+      // Remove from downloading set
+      setDownloadingVehicles((prev) => {
+        const next = new Set(prev);
+        next.delete(vehicleId);
+        return next;
+      });
+      closeContextMenu();
+    }
+  }, [closeContextMenu]);
 
   // Close context menu on escape or click outside
   useEffect(() => {
@@ -485,6 +526,8 @@ export function RateExplorerTable({
             onToggleEnabled(contextMenu.row.id, !contextMenu.row.isEnabled);
             closeContextMenu();
           }}
+          onDownloadImages={() => handleDownloadImages(contextMenu.row.id)}
+          isDownloading={downloadingVehicles.has(contextMenu.row.id)}
         />
       )}
     </div>

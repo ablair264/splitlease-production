@@ -8,6 +8,8 @@ import {
   Star,
   Eye,
   EyeOff,
+  ImageDown,
+  Loader2,
 } from "lucide-react";
 import type { VehicleTableRow } from "./types";
 
@@ -20,6 +22,8 @@ interface RowContextMenuProps {
   onFilterByModel: (model: string) => void;
   onToggleSpecialOffer: () => void;
   onToggleEnabled: () => void;
+  onDownloadImages: () => void;
+  isDownloading?: boolean;
 }
 
 export function RowContextMenu({
@@ -31,6 +35,8 @@ export function RowContextMenu({
   onFilterByModel,
   onToggleSpecialOffer,
   onToggleEnabled,
+  onDownloadImages,
+  isDownloading = false,
 }: RowContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -150,6 +156,36 @@ export function RowContextMenu({
           <>
             <Eye className="w-4 h-4" />
             <span>Enable on Website</span>
+          </>
+        )}
+      </button>
+
+      {/* Divider */}
+      <div className="my-1 border-t border-white/10" />
+
+      {/* Images section */}
+      <div className="px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-white/40">
+        Images
+      </div>
+
+      <button
+        onClick={onDownloadImages}
+        disabled={isDownloading}
+        className={`w-full flex items-center gap-3 px-3 py-2 text-sm hover:bg-white/5 ${
+          isDownloading
+            ? "text-cyan-400 cursor-wait"
+            : "text-white/70 hover:text-white"
+        }`}
+      >
+        {isDownloading ? (
+          <>
+            <Loader2 className="w-4 h-4 animate-spin" />
+            <span>Downloading...</span>
+          </>
+        ) : (
+          <>
+            <ImageDown className="w-4 h-4" />
+            <span>Download Images for Vehicle</span>
           </>
         )}
       </button>
