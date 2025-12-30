@@ -426,28 +426,79 @@ async function saveRatesToDatabase(
   const capCodes = [...new Set(rates.map((r) => r.capCode).filter(Boolean))] as string[];
   const capIds = [...new Set(rates.map((r) => r.capId).filter(Boolean))] as string[];
 
-  // Look up vehicles
-  let vehicleMap = new Map<string, string>(); // capCode/capId -> vehicleId
+  // Vehicle data type for lookup results
+  type VehicleData = {
+    id: string;
+    capCode: string | null;
+    capId: string | null;
+    manufacturer: string;
+    model: string;
+    variant: string | null;
+    modelYear: string | null;
+    fuelType: string | null;
+    transmission: string | null;
+    co2: number | null;
+    p11d: number | null;
+    otr: number | null;
+    bodyStyle: string | null;
+    insuranceGroup: number | null;
+    euroClass: string | null;
+  };
+
+  // Look up vehicles - fetch full vehicle data to use instead of parsed data
+  let vehicleMap = new Map<string, VehicleData>(); // capCode/capId -> vehicle data
 
   if (capCodes.length > 0) {
     const vehiclesByCode = await db
-      .select({ id: vehicles.id, capCode: vehicles.capCode })
+      .select({
+        id: vehicles.id,
+        capCode: vehicles.capCode,
+        capId: vehicles.capId,
+        manufacturer: vehicles.manufacturer,
+        model: vehicles.model,
+        variant: vehicles.variant,
+        modelYear: vehicles.modelYear,
+        fuelType: vehicles.fuelType,
+        transmission: vehicles.transmission,
+        co2: vehicles.co2,
+        p11d: vehicles.p11d,
+        otr: vehicles.otr,
+        bodyStyle: vehicles.bodyStyle,
+        insuranceGroup: vehicles.insuranceGroup,
+        euroClass: vehicles.euroClass,
+      })
       .from(vehicles)
       .where(inArray(vehicles.capCode, capCodes));
 
     for (const v of vehiclesByCode) {
-      if (v.capCode) vehicleMap.set(v.capCode, v.id);
+      if (v.capCode) vehicleMap.set(v.capCode, v);
     }
   }
 
   if (capIds.length > 0) {
     const vehiclesById = await db
-      .select({ id: vehicles.id, capId: vehicles.capId })
+      .select({
+        id: vehicles.id,
+        capCode: vehicles.capCode,
+        capId: vehicles.capId,
+        manufacturer: vehicles.manufacturer,
+        model: vehicles.model,
+        variant: vehicles.variant,
+        modelYear: vehicles.modelYear,
+        fuelType: vehicles.fuelType,
+        transmission: vehicles.transmission,
+        co2: vehicles.co2,
+        p11d: vehicles.p11d,
+        otr: vehicles.otr,
+        bodyStyle: vehicles.bodyStyle,
+        insuranceGroup: vehicles.insuranceGroup,
+        euroClass: vehicles.euroClass,
+      })
       .from(vehicles)
       .where(inArray(vehicles.capId, capIds));
 
     for (const v of vehiclesById) {
-      if (v.capId) vehicleMap.set(v.capId, v.id);
+      if (v.capId) vehicleMap.set(v.capId, v);
     }
   }
 
@@ -459,43 +510,48 @@ async function saveRatesToDatabase(
     const ratesToInsert = [];
 
     for (const rate of batch) {
-      const vehicleId = (rate.capCode && vehicleMap.get(rate.capCode)) ||
+      // Look up vehicle data - prefer CAP code match, then CAP ID match
+      const vehicleData = (rate.capCode && vehicleMap.get(rate.capCode)) ||
         (rate.capId && vehicleMap.get(rate.capId)) ||
         null;
+
+      const vehicleId = vehicleData?.id || null;
 
       // Map payment profile to payment plan
       const paymentPlan = mapPaymentProfile(rate.paymentProfile);
 
+      // Use vehicle table data when available, fall back to parsed rate data
+      // This ensures clean manufacturer/model/variant data from our vehicles table
       ratesToInsert.push({
         // Identifiers
-        capCode: rate.capCode || null,
+        capCode: rate.capCode || vehicleData?.capCode || null,
         vehicleId,
         importId,
         providerCode: options.providerCode,
         contractType: rate.contractType,
-        // Vehicle info
-        manufacturer: rate.manufacturer,
-        model: rate.model,
-        variant: rate.variant || null,
-        bodyStyle: rate.bodyStyle || null,
-        modelYear: rate.modelYear || null,
+        // Vehicle info - prefer vehicle table data for clean names
+        manufacturer: vehicleData?.manufacturer || rate.manufacturer,
+        model: vehicleData?.model || rate.model,
+        variant: vehicleData?.variant || rate.variant || null,
+        bodyStyle: vehicleData?.bodyStyle || rate.bodyStyle || null,
+        modelYear: vehicleData?.modelYear || rate.modelYear || null,
         isCommercial: false,
         // Contract terms
         term: rate.term,
         annualMileage: rate.annualMileage,
         paymentPlan: rate.paymentPlan || paymentPlan,
-        // Pricing
+        // Pricing - prefer rate data for pricing, but use vehicle table for P11D/OTR if not in rate
         totalRental: rate.monthlyRental,
         leaseRental: rate.leaseRental || (rate.isMaintained ? null : rate.monthlyRental),
         serviceRental: rate.serviceRental || null,
         nonRecoverableVat: rate.nonRecoverableVat || null,
         basicListPrice: rate.basicListPrice || null,
-        otrPrice: rate.otr || null,
-        p11d: rate.p11d || null,
-        // Vehicle specs
-        co2Gkm: rate.co2 || null,
-        fuelType: rate.fuelType || null,
-        transmission: rate.transmission || null,
+        otrPrice: rate.otr || vehicleData?.otr || null,
+        p11d: rate.p11d || vehicleData?.p11d || null,
+        // Vehicle specs - prefer vehicle table data
+        co2Gkm: rate.co2 || vehicleData?.co2 || null,
+        fuelType: vehicleData?.fuelType || rate.fuelType || null,
+        transmission: vehicleData?.transmission || rate.transmission || null,
         // Excess mileage
         excessMileagePpm: rate.excessMileagePpm || null,
         financeEmcPpm: rate.financeEmcPpm || null,
@@ -514,9 +570,9 @@ async function saveRatesToDatabase(
         wholeLifeCost: rate.wholeLifeCost || null,
         estimatedSaleValue: rate.estimatedSaleValue || null,
         fuelCostPpm: rate.fuelCostPpm || null,
-        insuranceGroup: rate.insuranceGroup || null,
+        insuranceGroup: rate.insuranceGroup || (vehicleData?.insuranceGroup ? String(vehicleData.insuranceGroup) : null),
         // Ratings
-        euroRating: rate.euroRating || null,
+        euroRating: vehicleData?.euroClass || rate.euroRating || null,
         rdeCertificationLevel: rate.rdeCertificationLevel || null,
       });
     }
