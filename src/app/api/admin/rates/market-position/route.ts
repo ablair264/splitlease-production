@@ -30,7 +30,7 @@ export type MarketPositionData = {
  * - capCodes: comma-separated CAP codes (optional, max 100; if omitted returns all with market data)
  * - contractType: CH, CHNM, PCH, PCHNM (default: CHNM)
  * - term: 24, 36, 48 (default: 36)
- * - mileage: annual mileage (default: 10000)
+ * - mileage: annual mileage (default: 5000)
  * - limit: max results when fetching all (default: 100)
  */
 export async function GET(req: NextRequest) {
@@ -44,7 +44,7 @@ export async function GET(req: NextRequest) {
     const capCodesParam = searchParams.get("capCodes");
     const contractType = searchParams.get("contractType") || "CHNM";
     const term = parseInt(searchParams.get("term") || "36");
-    const mileage = parseInt(searchParams.get("mileage") || "10000");
+    const mileage = parseInt(searchParams.get("mileage") || "5000");
     const limit = parseInt(searchParams.get("limit") || "100");
 
     let capCodes: string[] = [];

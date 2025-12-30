@@ -87,7 +87,7 @@ export default function MarketPositionPage() {
   const [error, setError] = useState<string | null>(null);
   const [contractType, setContractType] = useState("CHNM");
   const [term, setTerm] = useState(36);
-  const [mileage, setMileage] = useState(10000);
+  const [mileage, setMileage] = useState(5000);
   const [positionFilter, setPositionFilter] = useState<MarketPosition | "">("");
 
   const fetchData = async () => {
