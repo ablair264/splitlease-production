@@ -12,16 +12,18 @@ import {
   BestFunderBadge,
   FuelTypeBadge,
   OtrOpportunityBadge,
+  PricePositionBadge,
 } from "./cells";
 
 const columnHelper = createColumnHelper<VehicleTableRow>();
 
 interface ColumnOptions {
   onToggleSpecialOffer?: (vehicleId: string, isSpecialOffer: boolean) => void;
+  onViewCompetitors?: (capCode: string) => void;
 }
 
 export function createRateExplorerColumns(options: ColumnOptions = {}): ColumnDef<VehicleTableRow, unknown>[] {
-  const { onToggleSpecialOffer } = options;
+  const { onToggleSpecialOffer, onViewCompetitors } = options;
 
   return [
     // Selection checkbox
@@ -191,6 +193,41 @@ export function createRateExplorerColumns(options: ColumnOptions = {}): ColumnDe
         const aVal = rowA.original.termsHolderOtr?.savingsGbp || 0;
         const bVal = rowB.original.termsHolderOtr?.savingsGbp || 0;
         return aVal - bVal;
+      },
+    }),
+
+    // Market Position - comparison with competitor pricing
+    columnHelper.accessor("marketPosition", {
+      id: "marketPosition",
+      header: () => (
+        <span className="text-purple-400" title="Price position vs competitors">
+          Market
+        </span>
+      ),
+      cell: ({ getValue, row }) => {
+        const data = getValue();
+        if (!data) {
+          return (
+            <span className="text-[10px] text-white/30">-</span>
+          );
+        }
+        return (
+          <PricePositionBadge
+            position={data.position}
+            percentile={data.percentile}
+            priceDeltaPercent={data.priceDeltaPercent}
+            competitorCount={data.competitorCount}
+            showDelta={true}
+            onClick={onViewCompetitors ? () => onViewCompetitors(row.original.capCode) : undefined}
+          />
+        );
+      },
+      size: 110,
+      enableSorting: true,
+      sortingFn: (rowA, rowB) => {
+        const aVal = rowA.original.marketPosition?.percentile ?? 50;
+        const bVal = rowB.original.marketPosition?.percentile ?? 50;
+        return aVal - bVal; // Lower percentile = better position
       },
     }),
 
@@ -390,6 +427,7 @@ export const defaultColumnOrder = [
   "p11dGbp",
   "score",
   "bestFunder",
+  "marketPosition",
   "otrOpportunity",
   "strength",
   "integrity",
@@ -408,6 +446,7 @@ export const defaultColumnVisibility: Record<string, boolean> = {
   p11dGbp: true,
   score: true,
   bestFunder: true,
+  marketPosition: true,
   otrOpportunity: true,
   strength: true,
   integrity: true,

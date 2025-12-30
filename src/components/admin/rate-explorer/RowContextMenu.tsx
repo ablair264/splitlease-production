@@ -10,6 +10,7 @@ import {
   EyeOff,
   ImageDown,
   Loader2,
+  BarChart3,
 } from "lucide-react";
 import type { VehicleTableRow } from "./types";
 
@@ -23,6 +24,7 @@ interface RowContextMenuProps {
   onToggleSpecialOffer: () => void;
   onToggleEnabled: () => void;
   onDownloadImages: () => void;
+  onViewCompetitors: () => void;
   isDownloading?: boolean;
 }
 
@@ -36,6 +38,7 @@ export function RowContextMenu({
   onToggleSpecialOffer,
   onToggleEnabled,
   onDownloadImages,
+  onViewCompetitors,
   isDownloading = false,
 }: RowContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
@@ -99,6 +102,14 @@ export function RowContextMenu({
         <Copy className="w-4 h-4" />
         <span>Copy CAP Code</span>
         <span className="ml-auto text-[10px] text-white/30 font-mono">{vehicle.capCode}</span>
+      </button>
+
+      <button
+        onClick={onViewCompetitors}
+        className="w-full flex items-center gap-3 px-3 py-2 text-sm text-purple-400 hover:text-purple-300 hover:bg-white/5"
+      >
+        <BarChart3 className="w-4 h-4" />
+        <span>View Competitor Prices</span>
       </button>
 
       {/* Divider */}

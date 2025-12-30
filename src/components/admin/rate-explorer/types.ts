@@ -16,6 +16,15 @@ export interface TermsHolderOtr {
   savingsPercent: number; // Savings as percentage
 }
 
+export type MarketPosition = "lowest" | "below-avg" | "average" | "above-avg" | "highest";
+
+export interface MarketPositionData {
+  position: MarketPosition;
+  percentile: number; // 0-100, lower is better
+  priceDeltaPercent: number; // negative = we're cheaper
+  competitorCount: number;
+}
+
 export interface VehicleTableRow {
   id: string;
   capCode: string;
@@ -40,6 +49,7 @@ export interface VehicleTableRow {
   logoUrl: string;
   rateCount: number;
   termsHolderOtr: TermsHolderOtr | null; // Opportunity for better rate with terms holder OTR
+  marketPosition: MarketPositionData | null; // Position vs competitor pricing
 }
 
 export interface FilterOptions {

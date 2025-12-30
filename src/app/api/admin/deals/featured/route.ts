@@ -42,28 +42,8 @@ export async function GET(req: NextRequest) {
     const pageSize = Math.min(50, Math.max(1, parseInt(searchParams.get("pageSize") || "20")));
     const offset = (page - 1) * pageSize;
 
-    // Value score SQL
-    const valueScoreSQL = `
-      CASE
-        WHEN pr.p11d IS NULL OR pr.p11d <= 0 THEN 50
-        ELSE
-          CASE
-            WHEN (pr.total_rental::float * 36) / pr.p11d < 0.20 THEN 95
-            WHEN (pr.total_rental::float * 36) / pr.p11d < 0.28 THEN
-              95 - (((pr.total_rental::float * 36) / pr.p11d - 0.20) / 0.08 * 15)::int
-            WHEN (pr.total_rental::float * 36) / pr.p11d < 0.38 THEN
-              80 - (((pr.total_rental::float * 36) / pr.p11d - 0.28) / 0.10 * 15)::int
-            WHEN (pr.total_rental::float * 36) / pr.p11d < 0.48 THEN
-              65 - (((pr.total_rental::float * 36) / pr.p11d - 0.38) / 0.10 * 15)::int
-            WHEN (pr.total_rental::float * 36) / pr.p11d < 0.58 THEN
-              50 - (((pr.total_rental::float * 36) / pr.p11d - 0.48) / 0.10 * 10)::int
-            WHEN (pr.total_rental::float * 36) / pr.p11d < 0.70 THEN
-              40 - (((pr.total_rental::float * 36) / pr.p11d - 0.58) / 0.12 * 15)::int
-            ELSE
-              GREATEST(10, 25 - (((pr.total_rental::float * 36) / pr.p11d - 0.70) / 0.30 * 15)::int)
-          END
-      END
-    `;
+    // Use stored score from database (calculated at import time using unified scoring algorithm)
+    const scoreSQL = `COALESCE(pr.score, 50)`;
 
     if (tab === "featured") {
       // Get currently featured deals
@@ -103,7 +83,7 @@ export async function GET(req: NextRequest) {
             pr.cap_code,
             pr.total_rental,
             pr.provider_code,
-            (${valueScoreSQL}) AS score
+            (${scoreSQL}) AS score
           FROM provider_rates pr
           JOIN ratebook_imports ri ON ri.id = pr.import_id
           WHERE ri.is_latest = true
@@ -180,7 +160,7 @@ export async function GET(req: NextRequest) {
             pr.total_rental,
             pr.p11d,
             pr.provider_code,
-            (${valueScoreSQL}) AS score,
+            (${scoreSQL}) AS score,
             v.image_folder
           FROM provider_rates pr
           JOIN ratebook_imports ri ON ri.id = pr.import_id
@@ -210,7 +190,7 @@ export async function GET(req: NextRequest) {
         WITH best_deals AS (
           SELECT DISTINCT ON (pr.cap_code)
             pr.cap_code,
-            (${valueScoreSQL}) AS score
+            (${scoreSQL}) AS score
           FROM provider_rates pr
           JOIN ratebook_imports ri ON ri.id = pr.import_id
           WHERE ri.is_latest = true

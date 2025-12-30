@@ -18,6 +18,7 @@ import { createRateExplorerColumns, defaultColumnOrder, defaultColumnVisibility 
 import { RateExplorerToolbar } from "./RateExplorerToolbar";
 import { RateMatrixExpansion } from "./RateMatrixExpansion";
 import { RowContextMenu } from "./RowContextMenu";
+import { CompetitorOverlay } from "./CompetitorOverlay";
 import type { VehicleTableRow, TableFilters, FilterOptions, Pagination, SortState } from "./types";
 
 interface RateExplorerTableProps {
@@ -76,13 +77,22 @@ export function RateExplorerTable({
   // Image download state
   const [downloadingVehicles, setDownloadingVehicles] = useState<Set<string>>(new Set());
 
+  // Competitor overlay state
+  const [competitorOverlayCapCode, setCompetitorOverlayCapCode] = useState<string | null>(null);
+
+  // Handler for viewing competitors (from badge click)
+  const handleViewCompetitors = useCallback((capCode: string) => {
+    setCompetitorOverlayCapCode(capCode);
+  }, []);
+
   // Create columns with callbacks
   const columns = useMemo(
     () =>
       createRateExplorerColumns({
         onToggleSpecialOffer,
+        onViewCompetitors: handleViewCompetitors,
       }),
-    [onToggleSpecialOffer]
+    [onToggleSpecialOffer, handleViewCompetitors]
   );
 
   // Create table instance
@@ -547,9 +557,20 @@ export function RateExplorerTable({
             closeContextMenu();
           }}
           onDownloadImages={() => handleDownloadImages(contextMenu.row.id)}
+          onViewCompetitors={() => {
+            setCompetitorOverlayCapCode(contextMenu.row.capCode);
+            closeContextMenu();
+          }}
           isDownloading={downloadingVehicles.has(contextMenu.row.id)}
         />
       )}
+
+      {/* Competitor Overlay */}
+      <CompetitorOverlay
+        capCode={competitorOverlayCapCode || ""}
+        isOpen={!!competitorOverlayCapCode}
+        onClose={() => setCompetitorOverlayCapCode(null)}
+      />
     </div>
   );
 }

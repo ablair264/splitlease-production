@@ -13,6 +13,7 @@ import { createHash } from "crypto";
 
 import { detectFormat } from "./format-detector";
 import { parseMatrixWorkbook } from "./matrix-parser";
+import { calculateRateScore } from "@/lib/rates/scoring";
 import type {
   SmartImportOptions,
   SmartImportResult,
@@ -599,6 +600,26 @@ async function saveRatesToDatabase(
       // Map payment profile to payment plan
       const paymentPlan = mapPaymentProfile(rate.paymentProfile);
 
+      // Resolve values for scoring
+      const manufacturer = vehicleData?.manufacturer || rate.manufacturer;
+      const p11dValue = rate.p11d || vehicleData?.p11d || null;
+      const basicListValue = rate.basicListPrice || null;
+      const fuelTypeValue = vehicleData?.fuelType || rate.fuelType || null;
+
+      // Calculate deal score using the unified scoring algorithm
+      const scoreResult = calculateRateScore({
+        monthlyRentalPence: rate.monthlyRental,
+        term: rate.term,
+        paymentPlan: rate.paymentPlan || paymentPlan,
+        basicListPricePence: basicListValue,
+        p11dPence: p11dValue,
+        contractType: rate.contractType,
+        manufacturer,
+        fuelType: fuelTypeValue,
+        evRangeMiles: rate.wltpEvRange || null,
+        fuelEcoMpg: rate.fuelEcoCombined || null,
+      });
+
       // Use vehicle table data when available, fall back to parsed rate data
       // This ensures clean manufacturer/model/variant data from our vehicles table
       ratesToInsert.push({
@@ -609,7 +630,7 @@ async function saveRatesToDatabase(
         providerCode: options.providerCode,
         contractType: rate.contractType,
         // Vehicle info - prefer vehicle table data for clean names
-        manufacturer: vehicleData?.manufacturer || rate.manufacturer,
+        manufacturer,
         model: vehicleData?.model || rate.model,
         variant: vehicleData?.variant || rate.variant || null,
         bodyStyle: vehicleData?.bodyStyle || rate.bodyStyle || null,
@@ -624,12 +645,12 @@ async function saveRatesToDatabase(
         leaseRental: rate.leaseRental || (rate.isMaintained ? null : rate.monthlyRental),
         serviceRental: rate.serviceRental || null,
         nonRecoverableVat: rate.nonRecoverableVat || null,
-        basicListPrice: rate.basicListPrice || null,
+        basicListPrice: basicListValue,
         otrPrice: rate.otr || vehicleData?.otr || null,
-        p11d: rate.p11d || vehicleData?.p11d || null,
+        p11d: p11dValue,
         // Vehicle specs - prefer vehicle table data
         co2Gkm: rate.co2 || vehicleData?.co2 || null,
-        fuelType: vehicleData?.fuelType || rate.fuelType || null,
+        fuelType: fuelTypeValue,
         transmission: vehicleData?.transmission || rate.transmission || null,
         // Excess mileage
         excessMileagePpm: rate.excessMileagePpm || null,
@@ -653,6 +674,9 @@ async function saveRatesToDatabase(
         // Ratings
         euroRating: vehicleData?.euroClass || rate.euroRating || null,
         rdeCertificationLevel: rate.rdeCertificationLevel || null,
+        // Scoring - calculated at import time for consistency
+        score: scoreResult.score,
+        scoreBreakdown: scoreResult.breakdown,
       });
     }
 

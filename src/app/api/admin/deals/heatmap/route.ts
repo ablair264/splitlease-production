@@ -86,35 +86,10 @@ export async function GET(req: NextRequest) {
       filters.push(sql`pr.total_rental <= ${Math.round(parseFloat(maxPrice) * 100)}`);
     }
 
-    const adjustedRental = sql`(
-      CASE
-        WHEN pr.contract_type ILIKE '%PCH%' THEN pr.total_rental::float / 1.2
-        ELSE pr.total_rental::float
-      END
-    )`;
-
-    const p11dValue = sql`COALESCE(pr.p11d, v.p11d)`;
-    const ratio = sql`(${adjustedRental} * pr.term) / NULLIF(${p11dValue}, 0)`;
-
-    const valueScoreSql = sql`(
-      CASE
-        WHEN ${p11dValue} IS NULL OR ${p11dValue} <= 0 OR pr.term <= 0 THEN 50
-        ELSE
-          CASE
-            WHEN ${ratio} < 0.20 THEN 95
-            WHEN ${ratio} < 0.28 THEN 95 - ((${ratio} - 0.20) / 0.08 * 15)
-            WHEN ${ratio} < 0.38 THEN 80 - ((${ratio} - 0.28) / 0.10 * 15)
-            WHEN ${ratio} < 0.48 THEN 65 - ((${ratio} - 0.38) / 0.10 * 15)
-            WHEN ${ratio} < 0.58 THEN 50 - ((${ratio} - 0.48) / 0.10 * 10)
-            WHEN ${ratio} < 0.70 THEN 40 - ((${ratio} - 0.58) / 0.12 * 15)
-            ELSE GREATEST(10, 25 - ((${ratio} - 0.70) / 0.30 * 15))
-          END
-      END
-    )`;
-
+    // Use stored score from database (calculated at import time using unified scoring algorithm)
     const baseWhereClause = sql`${sql.join(filters, sql` AND `)}`;
     const whereClause = !Number.isNaN(scoreMin) && scoreMin > 0
-      ? sql`${baseWhereClause} AND ${valueScoreSql} >= ${scoreMin}`
+      ? sql`${baseWhereClause} AND COALESCE(pr.score, 50) >= ${scoreMin}`
       : baseWhereClause;
 
     const rowsResult = rowMode === "vehicles"

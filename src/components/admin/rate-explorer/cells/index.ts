@@ -6,3 +6,4 @@ export { IntegrityBadge } from "./IntegrityBadge";
 export { BestFunderBadge } from "./BestFunderBadge";
 export { FuelTypeBadge } from "./FuelTypeBadge";
 export { OtrOpportunityBadge } from "./OtrOpportunityBadge";
+export { PricePositionBadge, PricePositionDot } from "./PricePositionBadge";

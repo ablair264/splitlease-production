@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { providerRates, ratebookImports, vehicleStatus, fleetMarqueTerms } from "@/lib/db/schema";
-import { sql, eq, and, isNotNull, asc, or, ilike, inArray, gte, lte, desc } from "drizzle-orm";
+import { providerRates, ratebookImports, vehicleStatus, fleetMarqueTerms, marketIntelligenceDeals, marketIntelligenceSnapshots } from "@/lib/db/schema";
+import { sql, eq, and, isNotNull, asc, or, ilike, inArray, gte, lte, desc, gt } from "drizzle-orm";
+import type { MarketPosition } from "@/components/admin/rate-explorer/types";
 
 // Provider display names
 const PROVIDER_NAMES: Record<string, string> = {
@@ -209,6 +210,96 @@ export async function GET(request: NextRequest) {
       });
     }
 
+    // Get market intelligence data for all cap codes (competitor pricing)
+    let marketPositionMap = new Map<string, {
+      position: MarketPosition;
+      percentile: number;
+      priceDeltaPercent: number;
+      competitorCount: number;
+    }>();
+
+    if (capCodes.length > 0) {
+      // Get competitor prices from recent snapshots (last 7 days)
+      const sevenDaysAgo = new Date();
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+      const marketData = await db
+        .select({
+          capCode: marketIntelligenceDeals.matchedCapCode,
+          minPrice: sql<number>`MIN(${marketIntelligenceDeals.monthlyPrice})`,
+          maxPrice: sql<number>`MAX(${marketIntelligenceDeals.monthlyPrice})`,
+          avgPrice: sql<number>`AVG(${marketIntelligenceDeals.monthlyPrice})::integer`,
+          competitorCount: sql<number>`COUNT(DISTINCT ${marketIntelligenceDeals.source})`,
+        })
+        .from(marketIntelligenceDeals)
+        .innerJoin(
+          marketIntelligenceSnapshots,
+          eq(marketIntelligenceDeals.snapshotId, marketIntelligenceSnapshots.id)
+        )
+        .where(
+          and(
+            inArray(marketIntelligenceDeals.matchedCapCode, capCodes),
+            isNotNull(marketIntelligenceDeals.matchedCapCode),
+            gt(marketIntelligenceSnapshots.snapshotDate, sevenDaysAgo)
+          )
+        )
+        .groupBy(marketIntelligenceDeals.matchedCapCode);
+
+      // Create a map of our best prices by cap code
+      const ourPricesMap = new Map<string, number>();
+      vehicleAggregates.forEach((v) => {
+        if (v.capCode) {
+          ourPricesMap.set(v.capCode, Number(v.bestPrice));
+        }
+      });
+
+      // Calculate market position for each cap code
+      marketData.forEach((md) => {
+        if (!md.capCode) return;
+
+        const ourPrice = ourPricesMap.get(md.capCode);
+        if (!ourPrice) return;
+
+        const minPrice = Number(md.minPrice);
+        const maxPrice = Number(md.maxPrice);
+        const avgPrice = Number(md.avgPrice);
+        const competitorCount = Number(md.competitorCount);
+
+        // Calculate percentile (0 = cheapest, 100 = most expensive)
+        let percentile = 50;
+        if (maxPrice > minPrice) {
+          percentile = Math.round(((ourPrice - minPrice) / (maxPrice - minPrice)) * 100);
+          percentile = Math.max(0, Math.min(100, percentile));
+        }
+
+        // Determine position label
+        let position: MarketPosition;
+        if (percentile <= 10) {
+          position = "lowest";
+        } else if (percentile <= 40) {
+          position = "below-avg";
+        } else if (percentile <= 60) {
+          position = "average";
+        } else if (percentile <= 90) {
+          position = "above-avg";
+        } else {
+          position = "highest";
+        }
+
+        // Calculate delta from market average
+        const priceDeltaPercent = avgPrice > 0
+          ? Math.round(((ourPrice - avgPrice) / avgPrice) * 100)
+          : 0;
+
+        marketPositionMap.set(md.capCode, {
+          position,
+          percentile,
+          priceDeltaPercent,
+          competitorCount,
+        });
+      });
+    }
+
     // Filter and format vehicles using stored scores
     const processedVehicles = vehicleAggregates
       .map((v) => {
@@ -259,6 +350,9 @@ export async function GET(request: NextRequest) {
           };
         }
 
+        // Get market position if available
+        const marketPosition = v.capCode ? marketPositionMap.get(v.capCode) || null : null;
+
         return {
           id: v.vehicleId,
           capCode: v.capCode,
@@ -287,6 +381,7 @@ export async function GET(request: NextRequest) {
           logoUrl,
           rateCount: Number(v.rateCount),
           termsHolderOtr,
+          marketPosition,
         };
       })
       .filter((v): v is NonNullable<typeof v> => v !== null);
@@ -320,6 +415,10 @@ export async function GET(request: NextRequest) {
         case "star":
           // Sort special offers first when descending
           comparison = (a.isSpecialOffer ? 1 : 0) - (b.isSpecialOffer ? 1 : 0);
+          break;
+        case "marketPosition":
+          // Sort by percentile (lower = better market position)
+          comparison = (a.marketPosition?.percentile ?? 50) - (b.marketPosition?.percentile ?? 50);
           break;
         default:
           comparison = a.bestScore - b.bestScore;
