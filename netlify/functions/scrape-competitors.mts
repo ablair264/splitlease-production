@@ -6,9 +6,11 @@ import type { Config, Context } from "@netlify/functions";
  */
 export default async function handler(req: Request, context: Context) {
   const baseUrl = process.env.URL || process.env.DEPLOY_URL || "http://localhost:3000";
-  const cronSecret = process.env.CRON_SECRET;
+  const cronSecret = process.env.CRON_SECRET?.trim();
 
   console.log(`[Scrape Competitors] Starting scheduled scrape at ${new Date().toISOString()}`);
+  console.log(`[Scrape Competitors] Base URL: ${baseUrl}`);
+  console.log(`[Scrape Competitors] Has CRON_SECRET: ${!!cronSecret}, length: ${cronSecret?.length}`);
 
   try {
     // Call the intelligence fetch endpoint

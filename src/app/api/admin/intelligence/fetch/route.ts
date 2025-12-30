@@ -101,17 +101,33 @@ const normalizeParsedDeal = (
  */
 export async function POST(request: NextRequest) {
   // Check for cron secret (for scheduled functions)
-  const cronSecret = request.headers.get("x-cron-secret");
-  const validCronSecret = process.env.CRON_SECRET;
+  const cronSecret = request.headers.get("x-cron-secret")?.trim();
+  const validCronSecret = process.env.CRON_SECRET?.trim();
 
-  // If no cron secret or invalid, fall back to session auth
-  if (!cronSecret || cronSecret !== validCronSecret) {
+  // Debug logging for cron auth issues
+  console.log("[Intelligence Fetch] Auth check:", {
+    hasCronHeader: !!cronSecret,
+    hasEnvSecret: !!validCronSecret,
+    secretsMatch: cronSecret === validCronSecret,
+    cronSecretLength: cronSecret?.length,
+    envSecretLength: validCronSecret?.length,
+  });
+
+  // If valid cron secret provided, skip session auth entirely
+  const isCronAuth = cronSecret && validCronSecret && cronSecret === validCronSecret;
+
+  if (!isCronAuth) {
+    // No valid cron secret - require session auth
     // Dynamic import to avoid issues with edge runtime
     const { auth } = await import("@/lib/auth");
     const session = await auth();
     if (!session?.user?.id) {
+      console.log("[Intelligence Fetch] Auth failed - no valid cron secret or session");
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+    console.log("[Intelligence Fetch] Authenticated via session");
+  } else {
+    console.log("[Intelligence Fetch] Authenticated via cron secret");
   }
 
   try {
