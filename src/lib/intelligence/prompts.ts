@@ -11,6 +11,9 @@ You have access to:
 2. **Our Inventory** - Vehicles and rates from our provider network (Lex, Ogilvie, Venus, Drivalia)
 3. **Special Offers** - Currently featured vehicles on our website
 4. **Industry Data** - UK car registration statistics and BVRLA market trends
+5. **Smart Suggestions** - AI-scored recommendations for deals to feature (based on value scores and market position)
+6. **Funder Performance** - Metrics on which funders provide the best rates and coverage
+7. **Featured Deal Performance** - View/enquiry data showing how our featured deals perform
 
 ## Your Capabilities
 
@@ -20,6 +23,9 @@ You have access to:
 4. **Trend Analysis** - Spot price movements and market trends
 5. **Special Offer Suggestions** - Recommend vehicles to feature based on our competitive position
 6. **Competitor Assessment** - Evaluate if a competitor deal is a genuine threat or noise
+7. **Funder Analysis** - Compare funder performance and recommend which funders to prioritize for rate requests
+8. **Featured Deal Analysis** - Analyze which featured deals are performing well and suggest optimizations
+9. **Value Score Analysis** - Explain deals with exceptional value scores (90+) and why they're good candidates
 
 ## UK Leasing Context
 
@@ -140,4 +146,64 @@ export function formatOurRatesForContext(rates: Array<{
   });
 
   return rateLines.join('\n');
+}
+
+/**
+ * Format smart suggestions for AI context
+ */
+export function formatSmartSuggestionsForContext(suggestions: Array<{
+  manufacturer: string;
+  model: string;
+  priceGbp: number;
+  score: number;
+  confidence: number;
+  reasons: string[];
+}>): string {
+  if (suggestions.length === 0) return 'No smart suggestions available.';
+
+  return suggestions.map((s) => {
+    const reasons = s.reasons.map(r => r.replace(/_/g, ' ')).join(', ');
+    return `- ${s.manufacturer} ${s.model}: £${s.priceGbp}/mo, Score:${s.score}, Confidence:${s.confidence}% [${reasons}]`;
+  }).join('\n');
+}
+
+/**
+ * Format funder performance for AI context
+ */
+export function formatFunderPerformanceForContext(funders: Array<{
+  funder: string;
+  totalRates: number;
+  avgScore: number;
+}>): string {
+  if (funders.length === 0) return 'No funder data available.';
+
+  const funderNames: Record<string, string> = {
+    lex: 'Lex Autolease',
+    ogilvie: 'Ogilvie Fleet',
+    venus: 'Venus',
+    drivalia: 'Drivalia',
+  };
+
+  return funders.map((f) => {
+    const name = funderNames[f.funder] || f.funder;
+    return `- ${name}: ${f.totalRates} rates, Avg Score: ${f.avgScore}`;
+  }).join('\n');
+}
+
+/**
+ * Format featured deals performance for AI context
+ */
+export function formatFeaturedPerformanceForContext(deals: Array<{
+  manufacturer: string;
+  model: string;
+  views: number;
+  enquiries: number;
+  conversionRate: number;
+  daysLive: number;
+}>): string {
+  if (deals.length === 0) return 'No featured deals performance data available.';
+
+  return deals.map((d) => {
+    return `- ${d.manufacturer} ${d.model}: ${d.views} views, ${d.enquiries} enquiries (${d.conversionRate}% conversion), ${d.daysLive} days live`;
+  }).join('\n');
 }

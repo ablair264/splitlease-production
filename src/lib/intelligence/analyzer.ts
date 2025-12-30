@@ -12,13 +12,17 @@ import {
   ratebookImports,
   vehicleStatus,
   vehicles,
+  featuredDeals,
 } from '@/lib/db/schema';
-import { eq, desc, and, inArray } from 'drizzle-orm';
+import { eq, desc, and, inArray, gt, sql } from 'drizzle-orm';
 import {
   INTELLIGENCE_SYSTEM_PROMPT,
   SUMMARY_PROMPT,
   formatDealsForContext,
   formatOurRatesForContext,
+  formatSmartSuggestionsForContext,
+  formatFunderPerformanceForContext,
+  formatFeaturedPerformanceForContext,
 } from './prompts';
 
 const client = new OpenAI({
@@ -54,6 +58,37 @@ export interface MarketContext {
     model: string;
   }>;
   snapshotDates: Record<string, Date | null>;
+  // New pricing intelligence data
+  smartSuggestions: Array<{
+    manufacturer: string;
+    model: string;
+    priceGbp: number;
+    marketAvgGbp: number | null;
+    priceDelta: number | null;
+    score: number;
+    confidence: number;
+    reasons: string[];
+  }>;
+  funderPerformance: Array<{
+    funder: string;
+    bestPriceCount: number;
+    totalRates: number;
+    avgScore: number;
+    daysSinceImport: number;
+  }>;
+  featuredPerformance: Array<{
+    manufacturer: string;
+    model: string;
+    views: number;
+    enquiries: number;
+    conversionRate: number;
+    daysLive: number;
+  }>;
+  coverageGaps: Array<{
+    manufacturer: string;
+    model: string;
+    missingFunders: string[];
+  }>;
 }
 
 /**
@@ -129,6 +164,49 @@ export async function buildMarketContext(): Promise<MarketContext> {
     {}
   );
 
+  // Fetch smart suggestions data (high-score deals not yet featured)
+  const highScoreDeals = await db
+    .select({
+      manufacturer: providerRates.manufacturer,
+      model: providerRates.model,
+      minPrice: sql<number>`min(${providerRates.totalRental})::int`,
+      maxScore: sql<number>`max(${providerRates.score})::int`,
+    })
+    .from(providerRates)
+    .innerJoin(ratebookImports, eq(providerRates.importId, ratebookImports.id))
+    .where(and(eq(ratebookImports.isLatest, true), gt(providerRates.score, 80)))
+    .groupBy(providerRates.manufacturer, providerRates.model)
+    .orderBy(desc(sql`max(${providerRates.score})`))
+    .limit(20);
+
+  // Fetch funder performance metrics
+  const funderStats = await db
+    .select({
+      provider: providerRates.providerCode,
+      totalRates: sql<number>`count(*)::int`,
+      avgScore: sql<number>`avg(${providerRates.score})::int`,
+    })
+    .from(providerRates)
+    .innerJoin(ratebookImports, eq(providerRates.importId, ratebookImports.id))
+    .where(eq(ratebookImports.isLatest, true))
+    .groupBy(providerRates.providerCode);
+
+  // Fetch featured deals performance
+  const featuredStats = await db
+    .select({
+      manufacturer: featuredDeals.manufacturer,
+      model: featuredDeals.model,
+      views: featuredDeals.views,
+      enquiries: featuredDeals.enquiries,
+      featuredAt: featuredDeals.featuredAt,
+    })
+    .from(featuredDeals)
+    .where(eq(featuredDeals.isActive, true))
+    .orderBy(desc(featuredDeals.views))
+    .limit(10);
+
+  const now = new Date();
+
   return {
     competitorDeals: competitorDeals.map((d) => ({
       manufacturer: d.manufacturer,
@@ -155,6 +233,37 @@ export async function buildMarketContext(): Promise<MarketContext> {
     })),
     specialOffers,
     snapshotDates,
+    smartSuggestions: highScoreDeals.map((d) => ({
+      manufacturer: d.manufacturer,
+      model: d.model,
+      priceGbp: Math.round(d.minPrice / 100),
+      marketAvgGbp: null, // Would need market data join
+      priceDelta: null,
+      score: d.maxScore,
+      confidence: d.maxScore >= 90 ? 85 : 70,
+      reasons: d.maxScore >= 90 ? ['exceptional_value'] : ['high_score'],
+    })),
+    funderPerformance: funderStats.map((f) => ({
+      funder: f.provider,
+      bestPriceCount: 0, // Would need additional query
+      totalRates: f.totalRates,
+      avgScore: f.avgScore || 0,
+      daysSinceImport: 0, // Would need additional query
+    })),
+    featuredPerformance: featuredStats.map((f) => {
+      const daysLive = Math.max(1, Math.ceil((now.getTime() - f.featuredAt.getTime()) / (1000 * 60 * 60 * 24)));
+      const views = f.views || 0;
+      const enquiries = f.enquiries || 0;
+      return {
+        manufacturer: f.manufacturer,
+        model: f.model,
+        views,
+        enquiries,
+        conversionRate: views > 0 ? Math.round((enquiries / views) * 1000) / 10 : 0,
+        daysLive,
+      };
+    }),
+    coverageGaps: [], // Would need additional query to determine gaps
   };
 }
 
@@ -239,6 +348,9 @@ export async function chatWithIntelligence(
   const competitorContext = formatDealsForContext(context.competitorDeals);
   const ourRatesContext = formatOurRatesForContext(context.ourBestRates.slice(0, 50));
   const specialOffersContext = formatSpecialOffers(context.specialOffers);
+  const suggestionsContext = formatSmartSuggestionsForContext(context.smartSuggestions);
+  const funderContext = formatFunderPerformanceForContext(context.funderPerformance);
+  const featuredContext = formatFeaturedPerformanceForContext(context.featuredPerformance);
 
   const systemMessage = `${INTELLIGENCE_SYSTEM_PROMPT}
 
@@ -252,6 +364,15 @@ ${ourRatesContext || 'No rates available.'}
 
 ### Special Offers
 ${specialOffersContext}
+
+### Smart Suggestions (High-Score Deals to Feature)
+${suggestionsContext}
+
+### Funder Performance
+${funderContext}
+
+### Featured Deals Performance
+${featuredContext}
 
 ### Data Freshness
 ${formatFreshnessLines(context.snapshotDates)}`;
@@ -286,6 +407,9 @@ export async function streamChatWithIntelligence(
   const competitorContext = formatDealsForContext(context.competitorDeals);
   const ourRatesContext = formatOurRatesForContext(context.ourBestRates.slice(0, 50));
   const specialOffersContext = formatSpecialOffers(context.specialOffers);
+  const suggestionsContext = formatSmartSuggestionsForContext(context.smartSuggestions);
+  const funderContext = formatFunderPerformanceForContext(context.funderPerformance);
+  const featuredContext = formatFeaturedPerformanceForContext(context.featuredPerformance);
 
   const systemMessage = `${INTELLIGENCE_SYSTEM_PROMPT}
 
@@ -299,6 +423,15 @@ ${ourRatesContext || 'No rates available.'}
 
 ### Special Offers
 ${specialOffersContext}
+
+### Smart Suggestions (High-Score Deals to Feature)
+${suggestionsContext}
+
+### Funder Performance
+${funderContext}
+
+### Featured Deals Performance
+${featuredContext}
 
 ### Data Freshness
 ${formatFreshnessLines(context.snapshotDates)}`;
