@@ -147,7 +147,7 @@ export async function GET(req: NextRequest) {
           id: vehicles.id,
           p11d: vehicles.p11d,
           fuelType: vehicles.fuelType,
-          bodyType: vehicles.bodyType,
+          bodyType: vehicles.bodyStyle,
         })
         .from(vehicles)
         .where(inArray(vehicles.id, vehicleIds));
