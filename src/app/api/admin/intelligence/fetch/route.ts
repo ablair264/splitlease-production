@@ -96,8 +96,24 @@ const normalizeParsedDeal = (
 /**
  * POST /api/admin/intelligence/fetch
  * Fetch market data from competitor sources and store in database
+ *
+ * Authentication: Either user session OR cron secret header
  */
 export async function POST(request: NextRequest) {
+  // Check for cron secret (for scheduled functions)
+  const cronSecret = request.headers.get("x-cron-secret");
+  const validCronSecret = process.env.CRON_SECRET;
+
+  // If no cron secret or invalid, fall back to session auth
+  if (!cronSecret || cronSecret !== validCronSecret) {
+    // Dynamic import to avoid issues with edge runtime
+    const { auth } = await import("@/lib/auth");
+    const session = await auth();
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+  }
+
   try {
     const body = await request.json().catch(() => ({}));
     const sources = body.sources || [

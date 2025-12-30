@@ -7,5 +7,6 @@ export { FilterBuilder } from "./FilterBuilder";
 export { ViewManager } from "./ViewManager";
 export { SpecialOfferModal } from "./SpecialOfferModal";
 export { LoadingModal } from "./LoadingModal";
+export { PriceOverrideDialog } from "./PriceOverrideDialog";
 export * from "./types";
 export * from "./cells";

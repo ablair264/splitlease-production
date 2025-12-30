@@ -14,3 +14,13 @@
 # Cache node_modules more efficiently
 [[plugins]]
   package = "@netlify/plugin-nextjs"
+
+# Scheduled functions configuration
+[functions]
+  directory = "netlify/functions"
+  node_bundler = "esbuild"
+
+# Function-specific settings
+[functions."scrape-competitors"]
+  # Increase timeout for scraping (max 26 seconds on free tier, 15 min on paid)
+  timeout = 60

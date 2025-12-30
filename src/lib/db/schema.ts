@@ -162,6 +162,7 @@ export const fleetMarqueTerms = pgTable("fleet_marque_terms", {
   buildUrl: text("build_url"),
   scrapeBatchId: text("scrape_batch_id"),
   scrapedAt: timestamp("scraped_at").defaultNow().notNull(),
+  expiresAt: timestamp("expires_at"), // When the discount expires
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -1201,11 +1202,20 @@ export const featuredDeals = pgTable("featured_deals", {
   contractType: text("contract_type"),
   scoreAtFeaturing: integer("score_at_featuring"),
 
-  // Status
+  // Status & Queue workflow
   isActive: boolean("is_active").default(true),
+  status: text("status").default("pending"), // pending, approved, rejected, expired
   featuredAt: timestamp("featured_at").defaultNow().notNull(),
   unfeaturedAt: timestamp("unfeatured_at"),
+  expiresAt: timestamp("expires_at"), // Optional expiry date
   featuredBy: uuid("featured_by").references(() => users.id),
+  approvedBy: uuid("approved_by").references(() => users.id),
+  rejectedBy: uuid("rejected_by").references(() => users.id),
+  rejectionReason: text("rejection_reason"),
+
+  // Performance tracking
+  views: integer("views").default(0),
+  enquiries: integer("enquiries").default(0),
 
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
@@ -1552,3 +1562,48 @@ export type UserTableView = {
   createdAt: Date;
   updatedAt: Date;
 };
+
+// ============================================
+// PRICE OVERRIDES (Manual price adjustments)
+// ============================================
+
+export const priceOverrides = pgTable("price_overrides", {
+  id: uuid("id").primaryKey().defaultRandom(),
+
+  // Target identification - can override at different levels
+  capCode: text("cap_code"), // Override specific vehicle
+  providerCode: text("provider_code"), // Override for specific funder
+  contractType: text("contract_type"), // Override for specific contract type
+  term: integer("term"), // Override for specific term
+  annualMileage: integer("annual_mileage"), // Override for specific mileage
+
+  // Override type
+  overrideType: text("override_type").notNull(), // "fixed", "percentage", "absolute"
+
+  // Override value (in pence for fixed/absolute, percentage for percentage)
+  overrideValue: integer("override_value").notNull(),
+
+  // Reason and notes
+  reason: text("reason"),
+  internalNotes: text("internal_notes"),
+
+  // Validity period
+  validFrom: timestamp("valid_from").defaultNow().notNull(),
+  validUntil: timestamp("valid_until"), // null = indefinite
+
+  // Status
+  isActive: boolean("is_active").default(true),
+  priority: integer("priority").default(0), // Higher = takes precedence
+
+  // Audit
+  createdBy: uuid("created_by").references(() => users.id),
+  updatedBy: uuid("updated_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  capCodeIdx: index("idx_price_overrides_cap_code").on(table.capCode),
+  providerIdx: index("idx_price_overrides_provider").on(table.providerCode),
+  activeIdx: index("idx_price_overrides_active").on(table.isActive, table.validUntil),
+}));
+
+export type PriceOverrideType = "fixed" | "percentage" | "absolute";
