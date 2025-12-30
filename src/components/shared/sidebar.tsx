@@ -46,48 +46,39 @@ type NavSection = {
   items: NavItem[];
 };
 
-// Navigation structure per UX design spec
+// Simplified navigation structure - consolidated pages
 const navigation: NavSection[] = [
   {
-    name: "pricing",
-    label: "PRICING",
+    name: "main",
+    label: "MAIN",
     items: [
       { name: "Dashboard", href: "/admin/dashboard", icon: LayoutDashboard },
-      { name: "Rate Explorer", href: "/admin/rates", icon: Search },
-      { name: "Deal Finder", href: "/admin/deals", icon: Sparkles },
-      { name: "Offer Queue", href: "/admin/deals/queue", icon: Target },
-      { name: "OTR Calculator", href: "/admin/otr-calculator", icon: Calculator },
-      { name: "Import Manager", href: "/admin/imports", icon: Upload },
-      { name: "Scoring Config", href: "/admin/scoring", icon: Sliders },
+      { name: "Pricing", href: "/admin/pricing", icon: Search },
+      { name: "Deals", href: "/admin/deals", icon: Sparkles },
+      { name: "Imports", href: "/admin/imports", icon: Upload },
     ],
   },
   {
     name: "providers",
     label: "PROVIDERS",
     items: [
-      { name: "Lex Autolease", href: "/admin/lex-autolease", icon: Building2 },
-      { name: "Drivalia", href: "/admin/drivalia", icon: Building2 },
-      { name: "Ogilvie Fleet", href: "/admin/ogilvie", icon: Building2 },
-      { name: "Rate Uploader", href: "/admin/uploader", icon: FileSpreadsheet },
-      { name: "Terms Holders", href: "/admin/fleet-marque", icon: FileSpreadsheet },
-      { name: "Coverage Gaps", href: "/admin/funders/gaps", icon: Target },
-      { name: "Funder Performance", href: "/admin/funders/performance", icon: BarChart3 },
+      { name: "Providers", href: "/admin/providers", icon: Building2 },
+      { name: "Funders", href: "/admin/funders", icon: BarChart3 },
     ],
   },
   {
-    name: "intelligence",
-    label: "INTELLIGENCE",
+    name: "tools",
+    label: "TOOLS",
     items: [
-      { name: "Market Position", href: "/admin/market-position", icon: TrendingUp },
-      { name: "Price Alerts", href: "/admin/alerts", icon: Target },
+      { name: "OTR Calculator", href: "/admin/otr-calculator", icon: Calculator },
+      { name: "Salary Sacrifice", href: "/admin/salary-sacrifice", icon: Car },
+      { name: "Leads", href: "/admin/leads", icon: Target },
     ],
   },
   {
-    name: "data",
-    label: "DATA",
+    name: "settings",
+    label: "SETTINGS",
     items: [
-      { name: "Vehicles", href: "/admin/vehicles", icon: Car },
-      { name: "CAP Matching", href: "/admin/matching", icon: Link2 },
       { name: "Settings", href: "/admin/settings", icon: Settings },
     ],
   },
