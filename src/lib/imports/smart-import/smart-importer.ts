@@ -76,10 +76,21 @@ export async function analyzeFile(
           const rental = Number(getValue(row, "monthlyRental")) || 0;
           if (rental <= 0) continue;
 
+          // Get raw values and parse model from description if needed
+          const previewMfr = String(getValue(row, "manufacturer") || "Unknown");
+          let previewModel = String(getValue(row, "model") || "");
+          let previewVariant = String(getValue(row, "variant") || "");
+
+          if (!previewModel || previewModel === "Unknown" || previewModel === "") {
+            const parsed = extractModelFromDescription(previewVariant, previewMfr);
+            previewModel = parsed.model;
+            previewVariant = parsed.variant;
+          }
+
           preview.push({
-            manufacturer: String(getValue(row, "manufacturer") || "Unknown"),
-            model: String(getValue(row, "model") || "Unknown"),
-            variant: String(getValue(row, "variant") || ""),
+            manufacturer: previewMfr,
+            model: previewModel || "Unknown",
+            variant: previewVariant,
             term: Number(getValue(row, "term")) || 36,
             annualMileage: Number(getValue(row, "annualMileage")) || 10000,
             initialMonths: 1,
@@ -361,14 +372,26 @@ async function parseTabularWorkbook(
           return val ? String(val).trim() : undefined;
         };
 
+        // Get raw values
+        const rawManufacturer = String(getValue("manufacturer") || "Unknown");
+        let rawModel = String(getValue("model") || "");
+        let rawVariant = getStr("variant") || "";
+
+        // If model is empty or "Unknown", try to extract from variant/description
+        if (!rawModel || rawModel === "Unknown" || rawModel === "") {
+          const parsed = extractModelFromDescription(rawVariant, rawManufacturer);
+          rawModel = parsed.model;
+          rawVariant = parsed.variant;
+        }
+
         rates.push({
           // Identifiers
           capCode: capCode || undefined,
           capId: capId || undefined,
           // Vehicle info
-          manufacturer: String(getValue("manufacturer") || "Unknown"),
-          model: String(getValue("model") || "Unknown"),
-          variant: getStr("variant"),
+          manufacturer: rawManufacturer,
+          model: rawModel || "Unknown",
+          variant: rawVariant || undefined,
           bodyStyle: getStr("bodyStyle"),
           modelYear: getStr("modelYear"),
           // Contract terms
@@ -657,6 +680,110 @@ async function saveRatesToDatabase(
     .where(eq(ratebookImports.id, importId));
 
   return { successCount, errorCount, errors };
+}
+
+/**
+ * Extract model and variant from a combined vehicle description
+ * Handles cases like:
+ * - "Alfa Romeo Giulia 2.0 Turbo 280hp Intensa Auto" → { model: "Giulia", variant: "2.0 Turbo 280hp Intensa Auto" }
+ * - "AL Stelvio 2.0 T 280hp Sprint Auto AWD" → { model: "Stelvio", variant: "2.0 T 280hp Sprint Auto AWD" }
+ * - "Audi A1 5DR Sptbk 25 TFSI 95 Sport" → { model: "A1", variant: "5DR Sptbk 25 TFSI 95 Sport" }
+ */
+function extractModelFromDescription(
+  description: string,
+  manufacturer: string
+): { model: string; variant: string } {
+  if (!description || description === "Unknown") {
+    return { model: "Unknown", variant: "" };
+  }
+
+  let remaining = description.trim();
+
+  // Common manufacturer abbreviations
+  const abbreviations: Record<string, string[]> = {
+    "alfa romeo": ["al", "alfa", "alfa romeo"],
+    "aston martin": ["am", "aston", "aston martin"],
+    "audi": ["audi"],
+    "bmw": ["bmw"],
+    "citroen": ["citroen", "citroën"],
+    "cupra": ["cupra"],
+    "ds": ["ds", "ds automobiles"],
+    "fiat": ["fiat"],
+    "ford": ["ford"],
+    "genesis": ["genesis"],
+    "honda": ["honda"],
+    "hyundai": ["hyundai"],
+    "jaguar": ["jag", "jaguar"],
+    "jeep": ["jeep"],
+    "kia": ["kia"],
+    "land rover": ["lr", "land rover", "landrover"],
+    "lexus": ["lexus"],
+    "lotus": ["lotus"],
+    "maserati": ["maserati"],
+    "mazda": ["mazda"],
+    "mercedes": ["mb", "merc", "mercedes", "mercedes-benz"],
+    "mg": ["mg"],
+    "mini": ["mini"],
+    "mitsubishi": ["mitsubishi"],
+    "nissan": ["nissan"],
+    "peugeot": ["peugeot"],
+    "polestar": ["polestar"],
+    "porsche": ["porsche"],
+    "renault": ["renault"],
+    "seat": ["seat"],
+    "skoda": ["skoda", "škoda"],
+    "smart": ["smart"],
+    "subaru": ["subaru"],
+    "suzuki": ["suzuki"],
+    "tesla": ["tesla"],
+    "toyota": ["toyota"],
+    "vauxhall": ["vauxhall", "vx"],
+    "volkswagen": ["vw", "volkswagen"],
+    "volvo": ["volvo"],
+  };
+
+  // Get possible prefixes for this manufacturer
+  const mfrLower = manufacturer.toLowerCase();
+  const prefixes = abbreviations[mfrLower] || [mfrLower];
+
+  // Try to strip manufacturer/abbreviation from the start
+  for (const prefix of prefixes) {
+    const prefixLower = prefix.toLowerCase();
+    if (remaining.toLowerCase().startsWith(prefixLower)) {
+      remaining = remaining.slice(prefix.length).trim();
+      break;
+    }
+  }
+
+  // Now extract the model (first word or alphanumeric sequence)
+  // Models can be like: "Giulia", "A1", "3 Series", "X5", "e-208", "ID.4"
+  const words = remaining.split(/\s+/);
+
+  if (words.length === 0) {
+    return { model: "Unknown", variant: "" };
+  }
+
+  // Check if it's a numeric model that might have a suffix (e.g., "3 Series", "5 Series")
+  const numericModelPatterns = ["series", "class"];
+  let model = words[0];
+  let variantStart = 1;
+
+  // Handle "3 Series", "5 Series", "A Class", "C Class" patterns
+  if (words.length > 1) {
+    const secondWordLower = words[1].toLowerCase();
+    if (numericModelPatterns.includes(secondWordLower)) {
+      model = `${words[0]} ${words[1]}`;
+      variantStart = 2;
+    }
+  }
+
+  // Handle body style suffixes that are part of the model identifier
+  // e.g., "A1 Sportback" -> "A1", "3 Touring" -> "3"
+  // But we want to keep "A1" as model and "Sportback" in variant
+
+  const variant = words.slice(variantStart).join(" ");
+
+  return { model, variant };
 }
 
 /**
