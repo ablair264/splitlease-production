@@ -8,6 +8,8 @@ export type MarketPosition = "lowest" | "below-avg" | "average" | "above-avg" | 
 export type MarketPositionData = {
   capCode: string;
   vehicleId: string | null;
+  manufacturer: string;
+  model: string;
   ourPrice: number; // pence
   marketMin: number; // pence
   marketMax: number; // pence
@@ -25,10 +27,11 @@ export type MarketPositionData = {
  * Returns market position data for vehicles, comparing our rates to competitor prices.
  *
  * Query params:
- * - capCodes: comma-separated CAP codes (required, max 100)
+ * - capCodes: comma-separated CAP codes (optional, max 100; if omitted returns all with market data)
  * - contractType: CH, CHNM, PCH, PCHNM (default: CHNM)
  * - term: 24, 36, 48 (default: 36)
  * - mileage: annual mileage (default: 10000)
+ * - limit: max results when fetching all (default: 100)
  */
 export async function GET(req: NextRequest) {
   const session = await auth();
@@ -42,18 +45,18 @@ export async function GET(req: NextRequest) {
     const contractType = searchParams.get("contractType") || "CHNM";
     const term = parseInt(searchParams.get("term") || "36");
     const mileage = parseInt(searchParams.get("mileage") || "10000");
+    const limit = parseInt(searchParams.get("limit") || "100");
 
-    if (!capCodesParam) {
-      return NextResponse.json(
-        { error: "capCodes parameter required" },
-        { status: 400 }
-      );
-    }
+    let capCodes: string[] = [];
+    let fetchAll = false;
 
-    const capCodes = capCodesParam.split(",").slice(0, 100); // Limit to 100
-
-    if (capCodes.length === 0) {
-      return NextResponse.json({ positions: [] });
+    if (capCodesParam) {
+      capCodes = capCodesParam.split(",").slice(0, 100);
+      if (capCodes.length === 0) {
+        return NextResponse.json({ positions: [] });
+      }
+    } else {
+      fetchAll = true;
     }
 
     // Determine lease type for market intelligence matching
@@ -61,54 +64,112 @@ export async function GET(req: NextRequest) {
     const leaseType = isPersonal ? "personal" : "business";
 
     // Query our best prices and market intelligence in one go
-    const result = await db.execute(sql`
-      WITH our_rates AS (
-        SELECT DISTINCT ON (pr.cap_code)
-          pr.cap_code,
-          pr.vehicle_id,
-          pr.total_rental as our_price,
-          pr.provider_code
-        FROM provider_rates pr
-        JOIN ratebook_imports ri ON ri.id = pr.import_id
-        WHERE ri.is_latest = true
-          AND pr.contract_type = ${contractType}
-          AND pr.term = ${term}
-          AND pr.annual_mileage = ${mileage}
-          AND pr.cap_code IN (${sql.join(capCodes.map(c => sql`${c}`), sql`, `)})
-        ORDER BY pr.cap_code, pr.total_rental ASC
-      ),
-      market_stats AS (
-        SELECT
-          mid.matched_cap_code as cap_code,
-          MIN(mid.monthly_price) as market_min,
-          MAX(mid.monthly_price) as market_max,
-          AVG(mid.monthly_price)::integer as market_avg,
-          COUNT(DISTINCT mid.source) as competitor_count
-        FROM market_intelligence_deals mid
-        JOIN market_intelligence_snapshots mis ON mis.id = mid.snapshot_id
-        WHERE mid.matched_cap_code IN (${sql.join(capCodes.map(c => sql`${c}`), sql`, `)})
-          AND mid.matched_cap_code IS NOT NULL
-          AND (mid.lease_type = ${leaseType} OR mid.lease_type IS NULL)
-          AND (mid.term IS NULL OR mid.term = ${term})
-          AND mis.snapshot_date > NOW() - INTERVAL '7 days'
-        GROUP BY mid.matched_cap_code
-      )
-      SELECT
-        our.cap_code,
-        our.vehicle_id,
-        our.our_price,
-        our.provider_code,
-        COALESCE(ms.market_min, our.our_price) as market_min,
-        COALESCE(ms.market_max, our.our_price) as market_max,
-        COALESCE(ms.market_avg, our.our_price) as market_avg,
-        COALESCE(ms.competitor_count, 0) as competitor_count
-      FROM our_rates our
-      LEFT JOIN market_stats ms ON ms.cap_code = our.cap_code
-    `);
+    // Different query based on whether we're fetching all or specific CAP codes
+    const result = fetchAll
+      ? await db.execute(sql`
+          WITH market_stats AS (
+            SELECT
+              mid.matched_cap_code as cap_code,
+              MIN(mid.monthly_price) as market_min,
+              MAX(mid.monthly_price) as market_max,
+              AVG(mid.monthly_price)::integer as market_avg,
+              COUNT(DISTINCT mid.source) as competitor_count
+            FROM market_intelligence_deals mid
+            JOIN market_intelligence_snapshots mis ON mis.id = mid.snapshot_id
+            WHERE mid.matched_cap_code IS NOT NULL
+              AND (mid.lease_type = ${leaseType} OR mid.lease_type IS NULL)
+              AND (mid.term IS NULL OR mid.term = ${term})
+              AND mis.snapshot_date > NOW() - INTERVAL '7 days'
+            GROUP BY mid.matched_cap_code
+          ),
+          our_rates AS (
+            SELECT DISTINCT ON (pr.cap_code)
+              pr.cap_code,
+              pr.vehicle_id,
+              pr.manufacturer,
+              pr.model,
+              pr.total_rental as our_price,
+              pr.provider_code
+            FROM provider_rates pr
+            JOIN ratebook_imports ri ON ri.id = pr.import_id
+            WHERE ri.is_latest = true
+              AND pr.contract_type = ${contractType}
+              AND pr.term = ${term}
+              AND pr.annual_mileage = ${mileage}
+              AND pr.cap_code IS NOT NULL
+              AND pr.cap_code IN (SELECT cap_code FROM market_stats)
+            ORDER BY pr.cap_code, pr.total_rental ASC
+          )
+          SELECT
+            our.cap_code,
+            our.vehicle_id,
+            our.manufacturer,
+            our.model,
+            our.our_price,
+            our.provider_code,
+            ms.market_min,
+            ms.market_max,
+            ms.market_avg,
+            ms.competitor_count
+          FROM our_rates our
+          JOIN market_stats ms ON ms.cap_code = our.cap_code
+          ORDER BY ms.competitor_count DESC, ABS(our.our_price - ms.market_avg) DESC
+          LIMIT ${limit}
+        `)
+      : await db.execute(sql`
+          WITH our_rates AS (
+            SELECT DISTINCT ON (pr.cap_code)
+              pr.cap_code,
+              pr.vehicle_id,
+              pr.manufacturer,
+              pr.model,
+              pr.total_rental as our_price,
+              pr.provider_code
+            FROM provider_rates pr
+            JOIN ratebook_imports ri ON ri.id = pr.import_id
+            WHERE ri.is_latest = true
+              AND pr.contract_type = ${contractType}
+              AND pr.term = ${term}
+              AND pr.annual_mileage = ${mileage}
+              AND pr.cap_code IN (${sql.join(capCodes.map(c => sql`${c}`), sql`, `)})
+            ORDER BY pr.cap_code, pr.total_rental ASC
+          ),
+          market_stats AS (
+            SELECT
+              mid.matched_cap_code as cap_code,
+              MIN(mid.monthly_price) as market_min,
+              MAX(mid.monthly_price) as market_max,
+              AVG(mid.monthly_price)::integer as market_avg,
+              COUNT(DISTINCT mid.source) as competitor_count
+            FROM market_intelligence_deals mid
+            JOIN market_intelligence_snapshots mis ON mis.id = mid.snapshot_id
+            WHERE mid.matched_cap_code IN (${sql.join(capCodes.map(c => sql`${c}`), sql`, `)})
+              AND mid.matched_cap_code IS NOT NULL
+              AND (mid.lease_type = ${leaseType} OR mid.lease_type IS NULL)
+              AND (mid.term IS NULL OR mid.term = ${term})
+              AND mis.snapshot_date > NOW() - INTERVAL '7 days'
+            GROUP BY mid.matched_cap_code
+          )
+          SELECT
+            our.cap_code,
+            our.vehicle_id,
+            our.manufacturer,
+            our.model,
+            our.our_price,
+            our.provider_code,
+            COALESCE(ms.market_min, our.our_price) as market_min,
+            COALESCE(ms.market_max, our.our_price) as market_max,
+            COALESCE(ms.market_avg, our.our_price) as market_avg,
+            COALESCE(ms.competitor_count, 0) as competitor_count
+          FROM our_rates our
+          LEFT JOIN market_stats ms ON ms.cap_code = our.cap_code
+        `);
 
     const positions: MarketPositionData[] = (result.rows as Array<{
       cap_code: string;
       vehicle_id: string | null;
+      manufacturer: string;
+      model: string;
       our_price: number;
       provider_code: string;
       market_min: number;
@@ -155,6 +216,8 @@ export async function GET(req: NextRequest) {
       return {
         capCode: row.cap_code,
         vehicleId: row.vehicle_id,
+        manufacturer: row.manufacturer,
+        model: row.model,
         ourPrice,
         marketMin,
         marketMax,

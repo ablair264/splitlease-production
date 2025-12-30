@@ -6,7 +6,6 @@ import { Sparkles, BarChart3, Search, ChevronDown, ChevronUp } from "lucide-reac
 
 export default function AdminDealsPage() {
   const [showSuggestions, setShowSuggestions] = useState(true);
-  const [showPerformance, setShowPerformance] = useState(false);
   const [activeTab, setActiveTab] = useState<"finder" | "suggestions" | "performance">("finder");
 
   return (
@@ -42,7 +41,7 @@ export default function AdminDealsPage() {
             }`}
           >
             <Sparkles className="w-4 h-4" />
-            Smart Suggestions
+            Suggestions
           </button>
           <button
             onClick={() => setActiveTab("performance")}
@@ -76,7 +75,7 @@ export default function AdminDealsPage() {
               <div className="flex items-center gap-2">
                 <Sparkles className="w-4 h-4 text-amber-400" />
                 <span className="font-semibold text-white text-sm">AI Suggestions</span>
-                <span className="text-xs text-white/40">Recommended deals to feature</span>
+                <span className="text-xs text-white/40">High-value deals to feature</span>
               </div>
               {showSuggestions ? (
                 <ChevronUp className="w-4 h-4 text-white/50" />
@@ -85,7 +84,7 @@ export default function AdminDealsPage() {
               )}
             </button>
             {showSuggestions && (
-              <div className="border-t border-white/10">
+              <div className="border-t border-white/10 p-4">
                 <SmartSuggestions />
               </div>
             )}
@@ -96,9 +95,19 @@ export default function AdminDealsPage() {
         </>
       )}
 
-      {activeTab === "suggestions" && <SmartSuggestions className="h-full" />}
+      {activeTab === "suggestions" && (
+        <div
+          className="rounded-xl p-4"
+          style={{
+            background: "rgba(26, 31, 42, 0.6)",
+            border: "1px solid rgba(255, 255, 255, 0.08)",
+          }}
+        >
+          <SmartSuggestions />
+        </div>
+      )}
 
-      {activeTab === "performance" && <OfferPerformance className="h-full" />}
+      {activeTab === "performance" && <OfferPerformance />}
     </div>
   );
 }

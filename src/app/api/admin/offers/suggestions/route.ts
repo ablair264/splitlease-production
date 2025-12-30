@@ -9,7 +9,7 @@ import {
   marketIntelligenceDeals,
   marketIntelligenceSnapshots,
 } from "@/lib/db/schema";
-import { eq, and, desc, sql, gt, isNotNull, notInArray, inArray } from "drizzle-orm";
+import { eq, and, desc, sql, gt, isNotNull, notInArray, inArray, ne, or } from "drizzle-orm";
 
 export type SuggestionReason =
   | "exceptional_value"
@@ -97,7 +97,7 @@ export async function GET(req: NextRequest) {
 
     const excludeCapCodes = featuredCapCodes.map((f) => f.capCode);
 
-    // Get high-score deals
+    // Get high-score deals (exclude commercial vehicles)
     const highScoreDeals = await db
       .select({
         capCode: providerRates.capCode,
@@ -120,6 +120,11 @@ export async function GET(req: NextRequest) {
           eq(ratebookImports.isLatest, true),
           gt(providerRates.score, minScore),
           isNotNull(providerRates.capCode),
+          // Filter out commercial vehicles
+          or(
+            eq(providerRates.isCommercial, false),
+            sql`${providerRates.isCommercial} IS NULL`
+          ),
           excludeCapCodes.length > 0
             ? notInArray(providerRates.capCode, excludeCapCodes)
             : undefined
@@ -141,6 +146,7 @@ export async function GET(req: NextRequest) {
       .filter((id): id is string => id !== null);
 
     let vehicleMap = new Map<string, { p11d: number; fuelType: string | null; bodyType: string | null }>();
+
     if (vehicleIds.length > 0) {
       const vehicleData = await db
         .select({
@@ -153,7 +159,11 @@ export async function GET(req: NextRequest) {
         .where(inArray(vehicles.id, vehicleIds));
 
       vehicleMap = new Map(
-        vehicleData.map((v) => [v.id, { p11d: v.p11d || 0, fuelType: v.fuelType, bodyType: v.bodyType }])
+        vehicleData.map((v) => [v.id, {
+          p11d: v.p11d || 0,
+          fuelType: v.fuelType,
+          bodyType: v.bodyType,
+        }])
       );
     }
 
