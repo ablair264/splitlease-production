@@ -160,7 +160,7 @@ export async function GET(req: NextRequest) {
         totalTerms: sql<number>`count(*)::int`,
         uniqueMakes: sql<number>`count(distinct ${fleetMarqueTerms.make})::int`,
         avgDiscountPercent: sql<number>`coalesce(avg(${fleetMarqueTerms.discountPercent}::numeric), 0)`,
-        totalSavings: sql<number>`coalesce(sum(${fleetMarqueTerms.savings}), 0)::int`,
+        totalSavings: sql<string>`coalesce(sum(${fleetMarqueTerms.savings}), 0)::bigint`,
       })
       .from(fleetMarqueTerms);
 
@@ -168,7 +168,7 @@ export async function GET(req: NextRequest) {
       totalTerms: statsResult?.totalTerms || 0,
       uniqueMakes: statsResult?.uniqueMakes || 0,
       avgDiscountPercent: Math.round((statsResult?.avgDiscountPercent || 0) * 10) / 10,
-      totalSavingsGbp: (statsResult?.totalSavings || 0) / 100,
+      totalSavingsGbp: Number(statsResult?.totalSavings || 0) / 100,
     };
 
     const response: DiscountsResponse = {

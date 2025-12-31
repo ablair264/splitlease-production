@@ -225,11 +225,47 @@ export async function importOgilvieRatebook(options: OgilvieImportOptions): Prom
   // Get Ogilvie provider ID
   const ogilvieProvider = await db.select().from(financeProviders).where(eq(financeProviders.code, "ogilvie")).limit(1);
 
-  // Mark previous imports for this contract type as not latest
-  await db
-    .update(ratebookImports)
-    .set({ isLatest: false })
-    .where(and(eq(ratebookImports.providerCode, "ogilvie"), eq(ratebookImports.contractType, contractType), eq(ratebookImports.isLatest, true)));
+  // Pre-parse CSV to get term and annual mileage from first row
+  // This is needed to correctly mark only matching term/mileage imports as not latest
+  let importTerm = 36;
+  let importAnnualMileage = 10000;
+  try {
+    const preParseRecords = parse(csvContent, {
+      columns: true,
+      skip_empty_lines: true,
+      trim: true,
+      relax_quotes: true,
+      relax_column_count: true,
+      to: 1, // Only parse first row
+    });
+    if (preParseRecords.length > 0) {
+      const firstRow = preParseRecords[0] as Record<string, string>;
+      const contractTerm = parseInt(firstRow["Contract Term"]) || 36;
+      const contractMileage = parseInt(firstRow["Contract Mileage"]) || 10000;
+      importTerm = contractTerm;
+      // Convert total contract mileage to annual mileage
+      importAnnualMileage = Math.round(contractMileage / (contractTerm / 12));
+    }
+  } catch {
+    // If pre-parse fails, continue with defaults - main parse will catch errors
+  }
+
+  // Mark previous imports for this contract type + term + mileage as not latest
+  // Each Ogilvie CSV file is for a specific term/mileage combination
+  await db.execute(sql`
+    UPDATE ratebook_imports ri
+    SET is_latest = false
+    WHERE ri.provider_code = 'ogilvie'
+      AND ri.contract_type = ${contractType}
+      AND ri.is_latest = true
+      AND EXISTS (
+        SELECT 1 FROM provider_rates pr
+        WHERE pr.import_id = ri.id
+          AND pr.term = ${importTerm}
+          AND pr.annual_mileage = ${importAnnualMileage}
+        LIMIT 1
+      )
+  `);
 
   // Create import record
   const [importRecord] = await db
