@@ -69,3 +69,35 @@ export function countRatesByMakeModel(
   }
   return counts;
 }
+
+/**
+ * Index rates by CAP code for direct lookup
+ * Returns a map of capCode -> best rate for that CAP code
+ */
+export function indexRatesByCapCode(
+  rates: RateCandidate[]
+): Map<string, RateCandidate> {
+  const byCapCode = new Map<string, RateCandidate>();
+
+  for (const rate of rates) {
+    if (!rate.capCode) continue;
+
+    const existing = byCapCode.get(rate.capCode);
+    if (!existing) {
+      byCapCode.set(rate.capCode, rate);
+      continue;
+    }
+
+    // Keep the better one (higher score, or lower price if same score)
+    const incomingScore = scoreValue(rate.score);
+    const existingScore = scoreValue(existing.score);
+
+    if (incomingScore > existingScore) {
+      byCapCode.set(rate.capCode, rate);
+    } else if (incomingScore === existingScore && rate.totalRental < existing.totalRental) {
+      byCapCode.set(rate.capCode, rate);
+    }
+  }
+
+  return byCapCode;
+}

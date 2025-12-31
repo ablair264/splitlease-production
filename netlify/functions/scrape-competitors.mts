@@ -8,14 +8,17 @@ import * as cheerio from "cheerio";
  */
 
 interface LeasingComDeal {
-  Manufacturer: string;
-  Range: string;
-  DealCount: number;
-  ImagePath: string;
-  LowestInitialPayment: number;
-  MinMonthlyPrice: number;
-  MaxLeasingValueScore: number;
-  MaxDeliveryTime: number | null;
+  manufacturer: string;
+  model: string;
+  variant: string | null;
+  monthlyPrice: number;
+  initialPayment: number | null;
+  term: number | null;
+  annualMileage: number | null;
+  imageUrl: string | null;
+  url: string | null;
+  leaseType: string;
+  vatIncluded: boolean;
 }
 
 interface ParsedDeal {
@@ -81,34 +84,118 @@ const parseVatIncluded = (text: string) => {
 
 // ============ LEASING.COM ============
 async function fetchLeasingComDeals(): Promise<LeasingComDeal[]> {
-  const response = await fetch(
-    "https://leasing.com/api/deals/search/popular-manufacturer-ranges/",
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "application/json",
-        "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36",
-      },
-      body: JSON.stringify({
-        searchCriteria: {
-          facets: [],
-          matches: [
-            { matchWith: "Car", fieldName: "vehicleType" },
-            { matchWith: "Personal", fieldName: "FinanceType" },
-            null, null,
-          ],
-          ranges: [],
-          partialMatches: [],
+  console.log("[Leasing.com] Starting fetch from special-offers pages...");
+  const allDeals: LeasingComDeal[] = [];
+
+  // Fetch pages 1, 2, and 3 of special offers
+  const urls = [
+    "https://leasing.com/special-offers/",
+    "https://leasing.com/special-offers/page2/?sort=value",
+    "https://leasing.com/special-offers/page3/?sort=value",
+  ];
+
+  for (const url of urls) {
+    try {
+      console.log(`[Leasing.com] Fetching ${url}`);
+      const response = await fetch(url, {
+        headers: {
+          "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+          Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+          "Accept-Language": "en-GB,en;q=0.9",
         },
-        pagination: { itemsPerPage: 50, pageNumber: 1 },
-        orderBy: { fieldName: "popular", direction: "descending" },
-      }),
+      });
+
+      if (!response.ok) {
+        console.log(`[Leasing.com] ${url} returned ${response.status}`);
+        continue;
+      }
+
+      const html = await response.text();
+      console.log(`[Leasing.com] ${url} HTML length: ${html.length}`);
+      const $ = cheerio.load(html);
+
+      // Find deal cards - adjust selectors based on actual page structure
+      const cards = $("article, .deal-card, [data-deal], .vehicle-card, .offer-card").add($("a[href*='/car-leasing/']").closest("div, article"));
+      console.log(`[Leasing.com] Found ${cards.length} potential cards on ${url}`);
+
+      cards.each((_, el) => {
+        try {
+          // Try to extract deal info from various possible structures
+          const $el = $(el);
+
+          // Look for manufacturer/model in title or heading
+          const titleText = $el.find("h2, h3, .title, .vehicle-name, .make-model").first().text().trim();
+          const linkHref = $el.find("a[href*='/car-leasing/']").first().attr("href") || $el.attr("href");
+
+          // Extract manufacturer and model from URL path or title
+          let manufacturer: string | null = null;
+          let model: string | null = null;
+
+          if (linkHref) {
+            const pathMatch = linkHref.match(/\/car-leasing\/([^\/]+)\/([^\/]+)/);
+            if (pathMatch) {
+              manufacturer = slugToTitle(pathMatch[1]);
+              model = slugToTitle(pathMatch[2]);
+            }
+          }
+
+          if (!manufacturer && titleText) {
+            const parts = titleText.split(/\s+/);
+            if (parts.length >= 2) {
+              manufacturer = parts[0];
+              model = parts.slice(1).join(" ");
+            }
+          }
+
+          // Look for price - various selectors
+          const priceText = $el.find(".price, .monthly-price, [class*='price'], .cost").first().text();
+          const monthlyPrice = moneyToNumber(priceText);
+
+          // Look for variant/trim
+          const variant = $el.find(".variant, .trim, .subtitle, .derivative").first().text().trim() || null;
+
+          // Look for image
+          const imgSrc = $el.find("img").first().attr("src");
+          const imageUrl = imgSrc ? buildAbsoluteUrl(imgSrc, "https://leasing.com") : null;
+
+          // Look for term/mileage
+          const detailsText = $el.text();
+          const { term, mileage } = parseTermMileage(detailsText);
+
+          // Look for initial payment
+          const initialMatch = detailsText.match(/initial[^£]*£([0-9,.]+)/i);
+          const initialPayment = initialMatch ? moneyToNumber(initialMatch[1]) : null;
+
+          // Determine lease type from text
+          const leaseType = /business/i.test(detailsText) ? "business" : "personal";
+          const vatIncluded = parseVatIncluded(detailsText) ?? true;
+
+          if (manufacturer && model && monthlyPrice && monthlyPrice > 50) {
+            allDeals.push({
+              manufacturer,
+              model,
+              variant,
+              monthlyPrice,
+              initialPayment,
+              term,
+              annualMileage: mileage,
+              imageUrl,
+              url: linkHref ? buildAbsoluteUrl(linkHref, "https://leasing.com") : null,
+              leaseType,
+              vatIncluded,
+            });
+          }
+        } catch (e) {
+          // Skip malformed cards
+        }
+      });
+    } catch (error) {
+      console.error(`[Leasing.com] Error fetching ${url}:`, error);
     }
-  );
-  if (!response.ok) throw new Error(`Leasing.com error: ${response.status}`);
-  const data = await response.json();
-  return data.Items || [];
+  }
+
+  console.log(`[Leasing.com] Total deals scraped: ${allDeals.length}`);
+  return allDeals;
 }
 
 // ============ APPLIED LEASING ============
@@ -355,19 +442,24 @@ export default async function handler(req: Request, context: Context) {
     return validDeals.length;
   }
 
-  // 1. Leasing.com
+  // 1. Leasing.com (special offers pages)
   try {
-    console.log("[Scrape Competitors] Fetching Leasing.com...");
+    console.log("[Scrape Competitors] Fetching Leasing.com special offers...");
     const lcDeals = await fetchLeasingComDeals();
     const normalized: ParsedDeal[] = lcDeals.map(d => ({
-      manufacturer: d.Manufacturer,
-      model: d.Range,
-      monthlyPrice: d.MinMonthlyPrice,
-      initialPayment: d.LowestInitialPayment,
-      imageUrl: d.ImagePath,
-      leaseType: "personal",
-      vatIncluded: true,
+      manufacturer: d.manufacturer,
+      model: d.model,
+      variant: d.variant,
+      monthlyPrice: d.monthlyPrice,
+      initialPayment: d.initialPayment,
+      term: d.term,
+      annualMileage: d.annualMileage,
+      imageUrl: d.imageUrl,
+      url: d.url,
+      leaseType: d.leaseType,
+      vatIncluded: d.vatIncluded,
     }));
+    console.log(`[Scrape Competitors] Leasing.com raw: ${normalized.length} deals`);
     const count = await storeDeals("leasing_com", normalized);
     results.push({ source: "leasing_com", dealsCount: count });
   } catch (error) {

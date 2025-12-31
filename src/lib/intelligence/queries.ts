@@ -14,7 +14,7 @@ import {
   vehicles,
 } from '@/lib/db/schema';
 import { eq, and, desc, sql, isNull, or, inArray } from 'drizzle-orm';
-import { countRatesByMakeModel, selectTopRatesByScore } from './rate-selection';
+import { countRatesByMakeModel, selectTopRatesByScore, indexRatesByCapCode, RateCandidate } from './rate-selection';
 
 const COMPETITOR_SOURCES = [
   'leasing_com',
@@ -111,12 +111,16 @@ export async function fetchLatestCompetitorDeals(contractType: string) {
 }
 
 /**
- * Fetch our best rates grouped by make+model, returning top N derivatives per group
+ * Fetch our best rates grouped by make+model, returning top N derivatives per group.
+ * Also returns rates indexed by CAP code for direct matching.
  */
 export async function fetchOurBestRates(
   contractType: string,
   topN: number = 3
-) {
+): Promise<{
+  byMakeModel: Map<string, RateCandidate[]>;
+  byCapCode: Map<string, RateCandidate>;
+}> {
   const normalizedContract = normalizeContractType(contractType);
 
   const rawRates = await db
@@ -152,7 +156,10 @@ export async function fetchOurBestRates(
       providerRates.totalRental
     );
 
-  return selectTopRatesByScore(rawRates, topN);
+  return {
+    byMakeModel: selectTopRatesByScore(rawRates, topN),
+    byCapCode: indexRatesByCapCode(rawRates),
+  };
 }
 
 /**

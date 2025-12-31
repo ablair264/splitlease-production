@@ -15,10 +15,10 @@ import {
   Gap,
   PriceAlert,
   FeatureSuggestion,
-  DerivativeRate,
   IntelligenceData,
   IntelligenceMetadata,
 } from './types';
+import type { RateCandidate } from './rate-selection';
 import {
   fetchLatestCompetitorDeals,
   fetchOurBestRates,
@@ -36,7 +36,7 @@ export async function generateIntelligenceData(
   contractType: string
 ): Promise<IntelligenceData> {
   // Fetch all required data in parallel
-  const [competitorData, ourRatesMap, gaps, priceChanges, ourCounts, scoringConfig] =
+  const [competitorData, ourRatesResult, gaps, priceChanges, ourCounts, scoringConfig] =
     await Promise.all([
       fetchLatestCompetitorDeals(contractType),
       fetchOurBestRates(contractType, 3),
@@ -47,17 +47,28 @@ export async function generateIntelligenceData(
     ]);
 
   const { deals: competitorDeals, snapshot } = competitorData;
+  const { byMakeModel: ourRatesMap, byCapCode: ourRatesByCapCode } = ourRatesResult;
 
   // Generate comparisons
   const opportunities: Opportunity[] = [];
   const threats: Threat[] = [];
 
   for (const deal of competitorDeals) {
-    // Try exact match first
-    const exactKey = `${deal.manufacturer.toLowerCase()}|${deal.model.toLowerCase()}`;
-    let ourRates = ourRatesMap.get(exactKey);
+    let ourRates: RateCandidate[] | undefined;
 
-    // If no exact match, try fuzzy matching
+    // Priority 1: Direct CAP code match (most accurate)
+    if (deal.matchedCapCode && ourRatesByCapCode.has(deal.matchedCapCode)) {
+      const matchedRate = ourRatesByCapCode.get(deal.matchedCapCode)!;
+      ourRates = [matchedRate];
+    }
+
+    // Priority 2: Exact make/model match
+    if (!ourRates || ourRates.length === 0) {
+      const exactKey = `${deal.manufacturer.toLowerCase()}|${deal.model.toLowerCase()}`;
+      ourRates = ourRatesMap.get(exactKey);
+    }
+
+    // Priority 3: Fuzzy matching on make/model
     if (!ourRates || ourRates.length === 0) {
       for (const [mapKey, rates] of ourRatesMap) {
         const [ourMfr, ourModel] = mapKey.split('|');
