@@ -124,14 +124,14 @@ export async function GET(request: NextRequest) {
           ORDER BY pr2.total_rental ASC
           LIMIT 1
         )`.as("bestProviderCode"),
-        // Get score breakdown from the rate with the best PRICE (to match the displayed price)
+        // Get score breakdown from the rate with the best SCORE (to match the displayed score)
         bestScoreBreakdown: sql<string>`(
           SELECT pr2.score_breakdown::text
           FROM provider_rates pr2
           INNER JOIN ratebook_imports ri2 ON pr2.import_id = ri2.id
           WHERE pr2.vehicle_id = ${providerRates.vehicleId}
           AND ri2.is_latest = true
-          ORDER BY pr2.total_rental ASC
+          ORDER BY pr2.score DESC NULLS LAST
           LIMIT 1
         )`.as("bestScoreBreakdown"),
         // Get score from the rate with the best price
@@ -315,8 +315,8 @@ export async function GET(request: NextRequest) {
       .map((v) => {
         const p11dValue = v.p11d ? Number(v.p11d) : null;
         const bestPrice = Number(v.bestPrice);
-        // Use score from the best price rate (not best score rate)
-        const score = (v as any).bestPriceScore ? Number((v as any).bestPriceScore) : (v.bestScore ? Number(v.bestScore) : 50);
+        // Use the MAX score across all providers (best value available for this vehicle)
+        const score = v.bestScore ? Number(v.bestScore) : 50;
         const integrityDays = calculateIntegrityDays(v.latestRatebookDate);
 
         const status = statusMap.get(v.vehicleId || "") || {

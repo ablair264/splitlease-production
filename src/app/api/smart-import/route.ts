@@ -146,9 +146,19 @@ export async function POST(req: NextRequest) {
     });
   } catch (error) {
     console.error("Smart import error:", error);
+    // Include more error details for debugging
+    const errorMessage = error instanceof Error
+      ? error.message
+      : String(error);
+    const errorStack = error instanceof Error
+      ? error.stack?.split('\n').slice(0, 3).join(' -> ')
+      : undefined;
+
     return NextResponse.json(
       {
-        error: error instanceof Error ? error.message : "Import failed",
+        error: errorMessage,
+        errorType: error instanceof Error ? error.constructor.name : typeof error,
+        errorDetail: errorStack,
         success: false,
       },
       { status: 500 }
