@@ -1,27 +1,28 @@
 /**
  * Smart Import API
  *
- * Unified import endpoint that auto-detects file format and uses
- * the appropriate parser (tabular or matrix).
+ * Proxies import requests to Railway backend which handles the heavy processing.
+ * Railway doesn't have the same timeout limits as Netlify serverless functions.
  */
 
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { analyzeFile, smartImport } from "@/lib/imports/smart-import";
-import type { ContractType } from "@/lib/imports/smart-import";
+import { getApiBaseUrl } from "@/lib/utils";
+
+const RAILWAY_API = getApiBaseUrl();
 
 /**
  * POST /api/smart-import
  *
- * Analyze or import a ratebook file.
+ * Proxies to Railway backend for ratebook import processing.
  *
  * Body params:
  * - fileName: string - Original file name
  * - fileContent: string - Base64-encoded file content
- * - providerCode: string - Provider code (e.g., "lex", "ogilvie", "drivalia")
- * - contractType?: ContractType - Override contract type if known
+ * - providerCode: string - Provider code (e.g., "lex", "ogilvie", "ald")
+ * - contractType: ContractType - Contract type
+ * - columnMappings?: Record<string, string> - Custom column mappings
  * - action: "analyze" | "import" - What to do with the file
- * - dryRun?: boolean - Parse only, don't save to DB (for import action)
  */
 export async function POST(req: NextRequest) {
   const session = await auth();
@@ -36,20 +37,9 @@ export async function POST(req: NextRequest) {
       fileContent,
       providerCode,
       contractType,
-      action = "analyze",
-      dryRun = false,
+      action = "import",
       columnMappings,
-      forceReimport = false,
-    } = body as {
-      fileName: string;
-      fileContent: string;
-      providerCode: string;
-      contractType?: ContractType;
-      action?: "analyze" | "import";
-      dryRun?: boolean;
-      columnMappings?: Record<number, string>; // sourceColumn -> targetField
-      forceReimport?: boolean; // Skip duplicate check and reimport
-    };
+    } = body;
 
     if (!fileName || !fileContent) {
       return NextResponse.json(
@@ -58,18 +48,19 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    if (action === "import" && !providerCode) {
+    if (!providerCode) {
       return NextResponse.json(
-        { error: "providerCode is required for import" },
+        { error: "providerCode is required" },
         { status: 400 }
       );
     }
 
-    // Convert base64 to buffer
-    const buffer = Buffer.from(fileContent, "base64");
-
+    // For analyze action, we could do quick local detection
+    // but for actual import, proxy to Railway
     if (action === "analyze") {
-      // Just analyze and return preview
+      // Quick local analysis for preview - this is fast enough for Netlify
+      const { analyzeFile } = await import("@/lib/imports/smart-import");
+      const buffer = Buffer.from(fileContent, "base64");
       const result = await analyzeFile(buffer, fileName);
 
       return NextResponse.json({
@@ -92,7 +83,6 @@ export async function POST(req: NextRequest) {
               }
             : undefined,
           columnCount: sheet.columns?.length || 0,
-          // Include detected column mappings for tabular format
           columns: sheet.columns?.map((col) => ({
             sourceColumn: col.sourceColumn,
             sourceHeader: col.sourceHeader,
@@ -105,60 +95,53 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // Perform import
-    const result = await smartImport({
-      fileName,
-      fileContent: buffer,
-      providerCode,
-      contractType,
-      userId: session.user.id,
-      dryRun,
-      columnMappings,
-      forceReimport,
+    // Proxy import to Railway backend
+    const railwayEndpoint = columnMappings
+      ? `${RAILWAY_API}/api/admin/ratebooks/import-with-mappings`
+      : `${RAILWAY_API}/api/admin/ratebooks/import`;
+
+    console.log(`[smart-import] Proxying to Railway: ${railwayEndpoint}`);
+
+    const railwayResponse = await fetch(railwayEndpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        fileName,
+        fileContent,
+        providerCode,
+        contractType: contractType || "BCH",
+        columnMappings,
+      }),
     });
 
+    const railwayData = await railwayResponse.json();
+
+    if (!railwayResponse.ok) {
+      return NextResponse.json(
+        {
+          error: railwayData.error || "Import failed on Railway backend",
+          success: false,
+        },
+        { status: railwayResponse.status }
+      );
+    }
+
     return NextResponse.json({
-      success: result.success,
+      success: true,
       action: "import",
-      dryRun,
-      fileName,
-      format: result.format,
-      totalSheets: result.totalSheets,
-      processedSheets: result.processedSheets,
-      totalRates: result.totalRates,
-      successRates: result.successRates,
-      errorRates: result.errorRates,
-      errors: result.errors.slice(0, 20),
-      warnings: result.warnings.slice(0, 20),
-      // Include sample rates for verification
-      sampleRates: result.rates.slice(0, 10).map((rate) => ({
-        manufacturer: rate.manufacturer,
-        model: rate.model,
-        variant: rate.variant,
-        term: rate.term,
-        mileage: rate.annualMileage,
-        profile: rate.paymentProfile,
-        monthly: rate.monthlyRental / 100, // Convert pence to pounds for display
-        maintained: rate.isMaintained,
-        contract: rate.contractType,
-        source: `${rate.sourceSheet}:${rate.sourceRow + 1}`,
-      })),
+      ...railwayData,
     });
   } catch (error) {
     console.error("Smart import error:", error);
-    // Include more error details for debugging
     const errorMessage = error instanceof Error
       ? error.message
       : String(error);
-    const errorStack = error instanceof Error
-      ? error.stack?.split('\n').slice(0, 3).join(' -> ')
-      : undefined;
 
     return NextResponse.json(
       {
         error: errorMessage,
-        errorType: error instanceof Error ? error.constructor.name : typeof error,
-        errorDetail: errorStack,
         success: false,
       },
       { status: 500 }
@@ -187,22 +170,6 @@ export async function GET() {
       { code: "other", name: "Other" },
     ],
     contractTypes: ["BCH", "PCH", "CH", "CHNM", "PCHNM", "BSSNL"],
-    tabularHeaders: {
-      description: "Tabular files should have column headers matching these patterns",
-      patterns: {
-        capCode: ["cap_code", "capcode", "cap code"],
-        manufacturer: ["manufacturer", "make", "brand"],
-        model: ["model", "model_name", "range"],
-        variant: ["variant", "derivative", "vehicle description"],
-        term: ["term", "contract_term", "months"],
-        mileage: ["annual_mileage", "mileage", "miles"],
-        rental: ["rental", "monthly", "net_rental", "rate"],
-      },
-    },
-    matrixFormat: {
-      description: "Matrix files have payment profiles (e.g., 1+23, 3+35) in rows and mileage bands (e.g., 5000, 10000) in columns",
-      paymentProfiles: ["1+23", "1+35", "1+47", "3+33", "3+45", "6+42"],
-      mileageBands: [5000, 8000, 10000, 15000, 20000],
-    },
+    backend: "railway",
   });
 }
