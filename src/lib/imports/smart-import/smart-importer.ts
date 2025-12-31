@@ -690,10 +690,15 @@ async function saveRatesToDatabase(
   }
 
   // Update import record
+  // Status logic:
+  // - "completed" if any rates were successfully imported (even with some errors)
+  // - "failed" only if no rates were imported at all
+  const finalStatus = successCount > 0 ? "completed" : "failed";
+
   await db
     .update(ratebookImports)
     .set({
-      status: errorCount > successCount ? "failed" : "completed",
+      status: finalStatus,
       totalRows: rates.length,
       successRows: successCount,
       errorRows: errorCount,

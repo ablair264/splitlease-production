@@ -1,17 +1,27 @@
 "use client";
 
 import { Suspense } from "react";
-import { AlertCircle, BarChart3, FileOutput } from "lucide-react";
+import { BarChart3, Car, Building2, Truck, FileOutput } from "lucide-react";
 import { Tabs, useActiveTab } from "@/components/admin/shared/Tabs";
 import dynamic from "next/dynamic";
 
-const CoverageGapsContent = dynamic(
-  () => import("@/components/admin/funders-unified/CoverageGapsContent"),
+const PerformanceContent = dynamic(
+  () => import("@/components/admin/funders-unified/PerformanceContent"),
   { loading: () => <TabLoading /> }
 );
 
-const PerformanceContent = dynamic(
-  () => import("@/components/admin/funders-unified/PerformanceContent"),
+const LexContent = dynamic(
+  () => import("@/components/admin/providers-unified/LexContent"),
+  { loading: () => <TabLoading /> }
+);
+
+const OgilvieContent = dynamic(
+  () => import("@/components/admin/providers-unified/OgilvieContent"),
+  { loading: () => <TabLoading /> }
+);
+
+const DrivaliaContent = dynamic(
+  () => import("@/components/admin/providers-unified/DrivaliaContent"),
   { loading: () => <TabLoading /> }
 );
 
@@ -29,25 +39,37 @@ function TabLoading() {
 }
 
 const TABS = [
-  { id: "gaps", label: "Coverage Gaps", icon: AlertCircle },
-  { id: "performance", label: "Performance", icon: BarChart3 },
+  { id: "dashboard", label: "Dashboard", icon: BarChart3 },
+  { id: "lex", label: "Lex Autolease", icon: Car },
+  { id: "ogilvie", label: "Ogilvie Fleet", icon: Building2 },
+  { id: "drivalia", label: "Drivalia", icon: Truck },
   { id: "requests", label: "Rate Requests", icon: FileOutput },
 ];
 
 function FundersContent() {
-  const activeTab = useActiveTab("gaps");
+  const activeTab = useActiveTab("dashboard");
 
   return (
-    <Tabs tabs={TABS} defaultTab="gaps">
+    <Tabs tabs={TABS} defaultTab="dashboard">
       <div className="h-full">
-        {activeTab === "gaps" && (
-          <Suspense fallback={<TabLoading />}>
-            <CoverageGapsContent />
-          </Suspense>
-        )}
-        {activeTab === "performance" && (
+        {activeTab === "dashboard" && (
           <Suspense fallback={<TabLoading />}>
             <PerformanceContent />
+          </Suspense>
+        )}
+        {activeTab === "lex" && (
+          <Suspense fallback={<TabLoading />}>
+            <LexContent />
+          </Suspense>
+        )}
+        {activeTab === "ogilvie" && (
+          <Suspense fallback={<TabLoading />}>
+            <OgilvieContent />
+          </Suspense>
+        )}
+        {activeTab === "drivalia" && (
+          <Suspense fallback={<TabLoading />}>
+            <DrivaliaContent />
           </Suspense>
         )}
         {activeTab === "requests" && (

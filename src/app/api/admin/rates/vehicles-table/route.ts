@@ -73,10 +73,19 @@ export async function GET(request: NextRequest) {
     }
 
     // Vehicle category filter (cars vs vans)
+    // Uses isCommercial flag AND model/variant pattern matching for reliability
+    // Common van models: Transit, Sprinter, Crafter, Transporter, Vivaro, Dispatch, Expert, Combo, Berlingo, Partner, Caddy, etc.
+    const vanPatterns = sql`(
+      ${providerRates.isCommercial} = true
+      OR LOWER(${providerRates.model}) ~ '(transit|sprinter|crafter|transporter|vivaro|dispatch|expert|combo|berlingo|partner|caddy|proace|talento|scudo|ducato|boxer|relay|master|movano|interstar|trafic|primastar|nv200|nv300|nv400|e-nv200|townstar|promaster|metris|hiace|dyna|hilux|ranger|l200|amarok|navara|d-max|fullback|wrangler|defender|pickup|van|lcv|swb|mwb|lwb|panel|chassis|dropside|tipper|luton|flatbed)'
+      OR LOWER(${providerRates.variant}) ~ '(van|panel|kombi|chassis|dropside|tipper|luton|flatbed|pickup|crew.?cab|double.?cab|king.?cab)'
+      OR LOWER(${providerRates.bodyStyle}) ~ '(van|panel|pickup|commercial|lcv)'
+    )`;
+
     if (vehicleCategory === "cars") {
-      conditions.push(eq(providerRates.isCommercial, false));
+      conditions.push(sql`NOT ${vanPatterns}`);
     } else if (vehicleCategory === "vans") {
-      conditions.push(eq(providerRates.isCommercial, true));
+      conditions.push(vanPatterns);
     }
     // "all" doesn't add any condition
 

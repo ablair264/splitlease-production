@@ -54,7 +54,6 @@ const navigation: NavSection[] = [
     items: [
       { name: "Dashboard", href: "/admin/dashboard", icon: LayoutDashboard },
       { name: "Pricing", href: "/admin/pricing", icon: Search },
-      { name: "Deals", href: "/admin/deals", icon: Sparkles },
       { name: "Imports", href: "/admin/imports", icon: Upload },
     ],
   },
@@ -62,8 +61,8 @@ const navigation: NavSection[] = [
     name: "providers",
     label: "PROVIDERS",
     items: [
-      { name: "Providers", href: "/admin/providers", icon: Building2 },
       { name: "Funders", href: "/admin/funders", icon: BarChart3 },
+      { name: "Terms Holders", href: "/admin/terms-holders", icon: Building2 },
     ],
   },
   {

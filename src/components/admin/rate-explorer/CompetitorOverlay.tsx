@@ -11,8 +11,11 @@ import {
   ExternalLink,
   Calendar,
   Loader2,
+  Tag,
+  Copy,
+  Check,
 } from "lucide-react";
-import type { CompetitorComparison } from "@/app/api/admin/rates/[capCode]/competitors/route";
+import type { CompetitorComparison, FleetMarqueOtr } from "@/app/api/admin/rates/[capCode]/competitors/route";
 
 interface CompetitorOverlayProps {
   capCode: string;
@@ -20,19 +23,20 @@ interface CompetitorOverlayProps {
   onClose: () => void;
 }
 
-const POSITION_CONFIG: Record<string, { icon: typeof TrendingDown; color: string; bg: string }> = {
-  lowest: { icon: Trophy, color: "#22c55e", bg: "rgba(34, 197, 94, 0.15)" },
-  "below-avg": { icon: TrendingDown, color: "#3b82f6", bg: "rgba(59, 130, 246, 0.15)" },
-  average: { icon: Minus, color: "#a855f7", bg: "rgba(168, 85, 247, 0.15)" },
-  "above-avg": { icon: TrendingUp, color: "#f97316", bg: "rgba(249, 115, 22, 0.15)" },
-  highest: { icon: AlertTriangle, color: "#ef4444", bg: "rgba(239, 68, 68, 0.15)" },
-  only: { icon: Minus, color: "#64748b", bg: "rgba(100, 116, 139, 0.15)" },
+const POSITION_CONFIG: Record<string, { icon: typeof TrendingDown; color: string; label: string }> = {
+  lowest: { icon: Trophy, color: "#22c55e", label: "Cheapest" },
+  "below-avg": { icon: TrendingDown, color: "#3b82f6", label: "Below Avg" },
+  average: { icon: Minus, color: "#a855f7", label: "Average" },
+  "above-avg": { icon: TrendingUp, color: "#f97316", label: "Above Avg" },
+  highest: { icon: AlertTriangle, color: "#ef4444", label: "Most Expensive" },
+  only: { icon: Minus, color: "#64748b", label: "No Data" },
 };
 
 export function CompetitorOverlay({ capCode, isOpen, onClose }: CompetitorOverlayProps) {
   const [data, setData] = useState<CompetitorComparison | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [copiedOtr, setCopiedOtr] = useState(false);
 
   useEffect(() => {
     if (!isOpen || !capCode) return;
@@ -58,6 +62,14 @@ export function CompetitorOverlay({ capCode, isOpen, onClose }: CompetitorOverla
     fetchData();
   }, [isOpen, capCode]);
 
+  const handleCopyOtr = () => {
+    if (data?.fleetMarqueOtr?.discountedPrice) {
+      navigator.clipboard.writeText(data.fleetMarqueOtr.discountedPrice.toString());
+      setCopiedOtr(true);
+      setTimeout(() => setCopiedOtr(false), 2000);
+    }
+  };
+
   if (!isOpen) return null;
 
   const positionConfig = data ? POSITION_CONFIG[data.summary.ourPosition] || POSITION_CONFIG.only : POSITION_CONFIG.only;
@@ -71,212 +83,242 @@ export function CompetitorOverlay({ capCode, isOpen, onClose }: CompetitorOverla
         onClick={onClose}
       />
 
-      {/* Overlay panel */}
-      <div className="fixed inset-y-0 right-0 w-full max-w-2xl bg-[#0f1419] border-l border-white/10 z-50 overflow-y-auto">
+      {/* Overlay panel - narrower for compact design */}
+      <div className="fixed inset-y-0 right-0 w-full max-w-lg bg-[#0f1419] border-l border-white/10 z-50 overflow-y-auto">
         {/* Header */}
-        <div className="sticky top-0 bg-[#0f1419]/95 backdrop-blur border-b border-white/10 px-6 py-4 flex items-center justify-between">
+        <div className="sticky top-0 bg-[#0f1419]/95 backdrop-blur border-b border-white/10 px-4 py-3 flex items-center justify-between">
           <div>
-            <h2 className="text-lg font-semibold text-white">Competitor Comparison</h2>
-            <p className="text-sm text-white/50 font-mono">{capCode}</p>
+            <h2 className="text-sm font-semibold text-white">Market Comparison</h2>
+            <p className="text-xs text-white/50 font-mono">{capCode}</p>
           </div>
           <button
             onClick={onClose}
-            className="p-2 rounded-lg hover:bg-white/10 text-white/60 hover:text-white transition-colors"
+            className="p-1.5 rounded hover:bg-white/10 text-white/60 hover:text-white transition-colors"
           >
-            <X className="w-5 h-5" />
+            <X className="w-4 h-4" />
           </button>
         </div>
 
         {/* Content */}
-        <div className="p-6">
+        <div className="p-4">
           {loading && (
-            <div className="flex items-center justify-center py-20">
-              <Loader2 className="w-8 h-8 text-cyan-400 animate-spin" />
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="w-6 h-6 text-cyan-400 animate-spin" />
             </div>
           )}
 
           {error && (
-            <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-4 text-red-400">
+            <div className="bg-red-500/10 border border-red-500/30 rounded p-3 text-red-400 text-sm">
               {error}
             </div>
           )}
 
           {data && !loading && (
-            <div className="space-y-6">
-              {/* Vehicle Info */}
-              <div className="bg-white/5 rounded-lg p-4">
-                <h3 className="text-white font-medium">
-                  {data.manufacturer} {data.model}
-                </h3>
-                {data.variant && (
-                  <p className="text-white/60 text-sm mt-1">{data.variant}</p>
-                )}
+            <div className="space-y-4">
+              {/* Vehicle + Position - Compact Header */}
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-white font-medium text-sm">
+                    {data.manufacturer} {data.model}
+                  </h3>
+                  {data.variant && (
+                    <p className="text-white/50 text-xs truncate max-w-[250px]">{data.variant}</p>
+                  )}
+                </div>
+                <div
+                  className="flex items-center gap-1.5 px-2 py-1 rounded text-xs font-medium"
+                  style={{ background: `${positionConfig.color}20`, color: positionConfig.color }}
+                >
+                  <PositionIcon className="w-3.5 h-3.5" />
+                  {positionConfig.label}
+                </div>
               </div>
 
-              {/* Summary Card */}
-              <div
-                className="rounded-lg p-4 border"
-                style={{
-                  background: positionConfig.bg,
-                  borderColor: `${positionConfig.color}40`,
-                }}
-              >
-                <div className="flex items-center gap-3 mb-4">
-                  <div
-                    className="w-10 h-10 rounded-lg flex items-center justify-center"
-                    style={{ background: `${positionConfig.color}20` }}
-                  >
-                    <PositionIcon className="w-5 h-5" style={{ color: positionConfig.color }} />
-                  </div>
-                  <div>
-                    <div className="text-white font-semibold capitalize">
-                      {data.summary.ourPosition.replace("-", " ")} in Market
+              {/* Fleet Marque OTR - PROMINENT */}
+              {data.fleetMarqueOtr && (
+                <div className="bg-gradient-to-r from-amber-500/20 to-amber-600/10 border border-amber-500/30 rounded-lg p-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Tag className="w-4 h-4 text-amber-400" />
+                      <span className="text-amber-400 text-xs font-medium">Fleet Marque OTR</span>
                     </div>
-                    <div className="text-white/60 text-sm">
-                      {data.competitorPrices.length} competitor{data.competitorPrices.length !== 1 ? "s" : ""} found
-                    </div>
+                    {data.fleetMarqueOtr.buildUrl && (
+                      <a
+                        href={data.fleetMarqueOtr.buildUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-amber-400/60 hover:text-amber-400 transition-colors"
+                      >
+                        <ExternalLink className="w-3.5 h-3.5" />
+                      </a>
+                    )}
                   </div>
-                </div>
-
-                <div className="grid grid-cols-4 gap-4">
-                  <div className="text-center">
-                    <div className="text-white/50 text-xs mb-1">Our Best</div>
-                    <div className="text-white font-semibold">
-                      £{data.summary.ourBestPrice}
+                  <div className="mt-2 flex items-baseline justify-between">
+                    <div>
+                      <span className="text-2xl font-bold text-white">
+                        £{data.fleetMarqueOtr.discountedPrice?.toLocaleString()}
+                      </span>
+                      {data.fleetMarqueOtr.capPrice && (
+                        <span className="ml-2 text-white/40 text-sm line-through">
+                          £{data.fleetMarqueOtr.capPrice.toLocaleString()}
+                        </span>
+                      )}
                     </div>
-                  </div>
-                  <div className="text-center">
-                    <div className="text-white/50 text-xs mb-1">Market Min</div>
-                    <div className="text-green-400 font-semibold">
-                      £{data.summary.marketMin}
-                    </div>
-                  </div>
-                  <div className="text-center">
-                    <div className="text-white/50 text-xs mb-1">Market Avg</div>
-                    <div className="text-white font-semibold">
-                      £{data.summary.marketAvg}
-                    </div>
-                  </div>
-                  <div className="text-center">
-                    <div className="text-white/50 text-xs mb-1">Market Max</div>
-                    <div className="text-red-400 font-semibold">
-                      £{data.summary.marketMax}
-                    </div>
-                  </div>
-                </div>
-
-                {data.summary.priceDeltaPercent !== 0 && (
-                  <div className="mt-4 pt-4 border-t border-white/10 text-center">
-                    <span className="text-white/60 text-sm">vs Market Average: </span>
-                    <span
-                      className="font-semibold"
-                      style={{
-                        color: data.summary.priceDeltaPercent < 0 ? "#22c55e" : "#ef4444",
-                      }}
+                    <button
+                      onClick={handleCopyOtr}
+                      className="flex items-center gap-1 px-2 py-1 rounded bg-amber-500/20 text-amber-400 text-xs hover:bg-amber-500/30 transition-colors"
                     >
-                      {data.summary.priceDeltaPercent > 0 ? "+" : ""}
-                      {data.summary.priceDeltaPercent}%
-                    </span>
+                      {copiedOtr ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+                      {copiedOtr ? "Copied" : "Copy"}
+                    </button>
                   </div>
-                )}
-              </div>
+                  <div className="mt-1 flex items-center gap-3 text-xs">
+                    {data.fleetMarqueOtr.discountPercent && (
+                      <span className="text-green-400">
+                        -{data.fleetMarqueOtr.discountPercent.toFixed(1)}% discount
+                      </span>
+                    )}
+                    {data.fleetMarqueOtr.savings && (
+                      <span className="text-white/50">
+                        Saving £{data.fleetMarqueOtr.savings.toLocaleString()}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
 
-              {/* Our Prices */}
-              <div>
-                <h3 className="text-white font-medium mb-3 flex items-center gap-2">
-                  <div className="w-2 h-2 rounded-full bg-cyan-400" />
-                  Our Prices
-                </h3>
-                <div className="space-y-2">
-                  {data.ourPrices.map((price, idx) => (
-                    <div
-                      key={idx}
-                      className="bg-white/5 rounded-lg p-3 flex items-center justify-between"
-                    >
-                      <div>
-                        <div className="text-white font-medium">{price.providerName}</div>
-                        <div className="text-white/50 text-xs">
-                          {price.term} months • {price.mileage?.toLocaleString()} mi/yr • {price.contractType}
-                        </div>
-                      </div>
-                      <div className="text-cyan-400 font-semibold">
-                        £{price.monthlyPriceGbp}/mo
-                      </div>
-                    </div>
-                  ))}
+              {/* No Fleet Marque data */}
+              {!data.fleetMarqueOtr && (
+                <div className="bg-white/5 border border-white/10 rounded-lg p-3 text-center">
+                  <Tag className="w-4 h-4 text-white/30 mx-auto mb-1" />
+                  <p className="text-white/40 text-xs">No Fleet Marque pricing available</p>
+                </div>
+              )}
+
+              {/* Quick Stats Row */}
+              <div className="grid grid-cols-4 gap-2 text-center">
+                <div className="bg-white/5 rounded p-2">
+                  <div className="text-white/40 text-[10px] mb-0.5">Our Best</div>
+                  <div className="text-cyan-400 font-semibold text-sm">£{data.summary.ourBestPrice}</div>
+                </div>
+                <div className="bg-white/5 rounded p-2">
+                  <div className="text-white/40 text-[10px] mb-0.5">Mkt Min</div>
+                  <div className="text-green-400 font-semibold text-sm">£{data.summary.marketMin}</div>
+                </div>
+                <div className="bg-white/5 rounded p-2">
+                  <div className="text-white/40 text-[10px] mb-0.5">Mkt Avg</div>
+                  <div className="text-white font-semibold text-sm">£{data.summary.marketAvg}</div>
+                </div>
+                <div className="bg-white/5 rounded p-2">
+                  <div className="text-white/40 text-[10px] mb-0.5">Mkt Max</div>
+                  <div className="text-red-400 font-semibold text-sm">£{data.summary.marketMax}</div>
                 </div>
               </div>
 
-              {/* Competitor Prices */}
+              {/* Our Rates Table */}
               <div>
-                <h3 className="text-white font-medium mb-3 flex items-center gap-2">
-                  <div className="w-2 h-2 rounded-full bg-purple-400" />
-                  Competitor Prices
-                </h3>
+                <h4 className="text-white/60 text-xs font-medium mb-2 flex items-center gap-1.5">
+                  <div className="w-1.5 h-1.5 rounded-full bg-cyan-400" />
+                  Our Rates ({data.ourPrices.length})
+                </h4>
+                <div className="border border-white/10 rounded overflow-hidden">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="bg-white/5 text-white/50">
+                        <th className="px-2 py-1.5 text-left font-medium">Funder</th>
+                        <th className="px-2 py-1.5 text-center font-medium">Term</th>
+                        <th className="px-2 py-1.5 text-center font-medium">Miles</th>
+                        <th className="px-2 py-1.5 text-center font-medium">Type</th>
+                        <th className="px-2 py-1.5 text-right font-medium">Price</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/5">
+                      {data.ourPrices.map((price, idx) => (
+                        <tr key={idx} className="hover:bg-white/[0.02]">
+                          <td className="px-2 py-1.5 text-white">{price.providerName}</td>
+                          <td className="px-2 py-1.5 text-center text-white/70">{price.term}m</td>
+                          <td className="px-2 py-1.5 text-center text-white/70">{(price.mileage / 1000).toFixed(0)}k</td>
+                          <td className="px-2 py-1.5 text-center text-white/50">{price.contractType}</td>
+                          <td className="px-2 py-1.5 text-right text-cyan-400 font-medium">£{price.monthlyPriceGbp}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Competitor Table */}
+              <div>
+                <h4 className="text-white/60 text-xs font-medium mb-2 flex items-center gap-1.5">
+                  <div className="w-1.5 h-1.5 rounded-full bg-purple-400" />
+                  Competitors ({data.competitorPrices.length})
+                </h4>
                 {data.competitorPrices.length === 0 ? (
-                  <div className="bg-white/5 rounded-lg p-4 text-center text-white/50">
-                    No competitor data available for this vehicle
+                  <div className="bg-white/5 rounded p-3 text-center text-white/40 text-xs">
+                    No competitor data found
                   </div>
                 ) : (
-                  <div className="space-y-2">
-                    {data.competitorPrices
-                      .sort((a, b) => a.monthlyPriceGbp - b.monthlyPriceGbp)
-                      .map((comp, idx) => {
-                        const isCheaperThanUs = comp.monthlyPriceGbp < data.summary.ourBestPrice;
-                        const isMoreExpensive = comp.monthlyPriceGbp > data.summary.ourBestPrice;
-
-                        return (
-                          <div
-                            key={idx}
-                            className="bg-white/5 rounded-lg p-3 flex items-center justify-between"
-                          >
-                            <div className="flex-1">
-                              <div className="flex items-center gap-2">
-                                <span className="text-white font-medium">{comp.sourceName}</span>
-                                {isCheaperThanUs && (
-                                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/20 text-red-400">
-                                    Beating us
-                                  </span>
-                                )}
-                                {isMoreExpensive && (
-                                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-500/20 text-green-400">
-                                    Higher
-                                  </span>
-                                )}
-                              </div>
-                              <div className="text-white/50 text-xs flex items-center gap-3 mt-1">
-                                {comp.term && <span>{comp.term} months</span>}
-                                {comp.mileage && <span>{comp.mileage.toLocaleString()} mi/yr</span>}
-                                {comp.leaseType && (
-                                  <span className="capitalize">{comp.leaseType}</span>
-                                )}
-                              </div>
-                            </div>
-                            <div className="text-right">
-                              <div
-                                className="font-semibold"
-                                style={{
-                                  color: isCheaperThanUs ? "#ef4444" : isMoreExpensive ? "#22c55e" : "#ffffff",
-                                }}
-                              >
-                                £{comp.monthlyPriceGbp}/mo
-                              </div>
-                              <div className="text-white/40 text-[10px] flex items-center gap-1">
-                                <Calendar className="w-3 h-3" />
-                                {new Date(comp.snapshotDate).toLocaleDateString()}
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })}
+                  <div className="border border-white/10 rounded overflow-hidden">
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="bg-white/5 text-white/50">
+                          <th className="px-2 py-1.5 text-left font-medium">Source</th>
+                          <th className="px-2 py-1.5 text-center font-medium">Term</th>
+                          <th className="px-2 py-1.5 text-center font-medium">Miles</th>
+                          <th className="px-2 py-1.5 text-center font-medium">Date</th>
+                          <th className="px-2 py-1.5 text-right font-medium">Price</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-white/5">
+                        {data.competitorPrices
+                          .sort((a, b) => a.monthlyPriceGbp - b.monthlyPriceGbp)
+                          .map((comp, idx) => {
+                            const isCheaper = comp.monthlyPriceGbp < data.summary.ourBestPrice;
+                            const isMore = comp.monthlyPriceGbp > data.summary.ourBestPrice;
+                            return (
+                              <tr key={idx} className="hover:bg-white/[0.02]">
+                                <td className="px-2 py-1.5">
+                                  <div className="flex items-center gap-1">
+                                    <span className="text-white">{comp.sourceName}</span>
+                                    {isCheaper && (
+                                      <span className="text-[9px] px-1 py-0.5 rounded bg-red-500/20 text-red-400">Beat</span>
+                                    )}
+                                  </div>
+                                </td>
+                                <td className="px-2 py-1.5 text-center text-white/70">
+                                  {comp.term ? `${comp.term}m` : "-"}
+                                </td>
+                                <td className="px-2 py-1.5 text-center text-white/70">
+                                  {comp.mileage ? `${(comp.mileage / 1000).toFixed(0)}k` : "-"}
+                                </td>
+                                <td className="px-2 py-1.5 text-center text-white/40">
+                                  {new Date(comp.snapshotDate).toLocaleDateString("en-GB", { day: "2-digit", month: "short" })}
+                                </td>
+                                <td className="px-2 py-1.5 text-right font-medium" style={{ color: isCheaper ? "#ef4444" : isMore ? "#22c55e" : "#ffffff" }}>
+                                  £{comp.monthlyPriceGbp}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                      </tbody>
+                    </table>
                   </div>
                 )}
               </div>
 
-              {/* Data freshness note */}
-              <div className="text-center text-white/40 text-xs pt-4 border-t border-white/10">
-                Competitor data from the last 14 days
-              </div>
+              {/* Delta */}
+              {data.summary.priceDeltaPercent !== 0 && (
+                <div className="text-center text-xs">
+                  <span className="text-white/40">vs Market Avg: </span>
+                  <span
+                    className="font-medium"
+                    style={{ color: data.summary.priceDeltaPercent < 0 ? "#22c55e" : "#ef4444" }}
+                  >
+                    {data.summary.priceDeltaPercent > 0 ? "+" : ""}
+                    {data.summary.priceDeltaPercent}%
+                  </span>
+                </div>
+              )}
             </div>
           )}
         </div>

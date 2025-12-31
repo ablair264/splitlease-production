@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { marketIntelligenceDeals, marketIntelligenceSnapshots, providerRates, ratebookImports } from "@/lib/db/schema";
+import { marketIntelligenceDeals, marketIntelligenceSnapshots, providerRates, ratebookImports, fleetMarqueTerms } from "@/lib/db/schema";
 import { eq, and, isNotNull, desc, gt, sql, inArray } from "drizzle-orm";
 
 const SOURCE_LABELS: Record<string, string> = {
@@ -33,6 +33,14 @@ export interface OurPrice {
   contractType: string;
 }
 
+export interface FleetMarqueOtr {
+  capPrice: number | null;
+  discountPercent: number | null;
+  discountedPrice: number | null;
+  savings: number | null;
+  buildUrl: string | null;
+}
+
 export interface CompetitorComparison {
   capCode: string;
   manufacturer: string;
@@ -40,6 +48,7 @@ export interface CompetitorComparison {
   variant: string | null;
   ourPrices: OurPrice[];
   competitorPrices: CompetitorPrice[];
+  fleetMarqueOtr: FleetMarqueOtr | null;
   summary: {
     ourBestPrice: number;
     marketMin: number;
@@ -179,6 +188,30 @@ export async function GET(
         snapshotDate: c.snapshotDate.toISOString(),
       }));
 
+    // Fetch Fleet Marque OTR pricing for this vehicle
+    const fleetMarqueResult = await db
+      .select({
+        capPrice: fleetMarqueTerms.capPrice,
+        discountPercent: fleetMarqueTerms.discountPercent,
+        discountedPrice: fleetMarqueTerms.discountedPrice,
+        savings: fleetMarqueTerms.savings,
+        buildUrl: fleetMarqueTerms.buildUrl,
+      })
+      .from(fleetMarqueTerms)
+      .where(eq(fleetMarqueTerms.capCode, capCode))
+      .orderBy(desc(fleetMarqueTerms.scrapedAt))
+      .limit(1);
+
+    const fleetMarqueOtr: FleetMarqueOtr | null = fleetMarqueResult.length > 0
+      ? {
+          capPrice: fleetMarqueResult[0].capPrice ? Math.round(fleetMarqueResult[0].capPrice / 100) : null,
+          discountPercent: fleetMarqueResult[0].discountPercent ? parseFloat(fleetMarqueResult[0].discountPercent) : null,
+          discountedPrice: fleetMarqueResult[0].discountedPrice ? Math.round(fleetMarqueResult[0].discountedPrice / 100) : null,
+          savings: fleetMarqueResult[0].savings ? Math.round(fleetMarqueResult[0].savings / 100) : null,
+          buildUrl: fleetMarqueResult[0].buildUrl,
+        }
+      : null;
+
     // Calculate summary
     const ourBestPrice = Math.min(...ourPrices.map((p) => p.monthlyPriceGbp));
     const allPrices = [
@@ -222,6 +255,7 @@ export async function GET(
       variant: vehicleInfo.variant,
       ourPrices,
       competitorPrices,
+      fleetMarqueOtr,
       summary: {
         ourBestPrice,
         marketMin,

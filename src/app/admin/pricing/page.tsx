@@ -3,13 +3,12 @@
 import { Suspense } from "react";
 import {
   Search,
-  TrendingUp,
-  AlertTriangle,
+  Sparkles,
+  ClipboardList,
+  BarChart3,
   Sliders,
 } from "lucide-react";
 import { Tabs, useActiveTab } from "@/components/admin/shared/Tabs";
-
-// Lazy load tab content components
 import dynamic from "next/dynamic";
 
 const RateExplorerContent = dynamic(
@@ -17,13 +16,18 @@ const RateExplorerContent = dynamic(
   { loading: () => <TabLoading /> }
 );
 
-const MarketPositionContent = dynamic(
-  () => import("@/components/admin/pricing/MarketPositionContent"),
+const OfferSuggestionsContent = dynamic(
+  () => import("@/components/admin/pricing/OfferSuggestionsContent"),
   { loading: () => <TabLoading /> }
 );
 
-const PriceAlertsContent = dynamic(
-  () => import("@/components/admin/pricing/PriceAlertsContent"),
+const OfferQueueContent = dynamic(
+  () => import("@/components/admin/deals-unified/OfferQueueContent"),
+  { loading: () => <TabLoading /> }
+);
+
+const PerformanceContent = dynamic(
+  () => import("@/components/admin/deals-unified/PerformanceContent"),
   { loading: () => <TabLoading /> }
 );
 
@@ -42,8 +46,9 @@ function TabLoading() {
 
 const TABS = [
   { id: "explorer", label: "Rate Explorer", icon: Search },
-  { id: "market", label: "Market Position", icon: TrendingUp },
-  { id: "alerts", label: "Price Alerts", icon: AlertTriangle },
+  { id: "suggestions", label: "Offer Suggestions", icon: Sparkles },
+  { id: "queue", label: "Offer Queue", icon: ClipboardList },
+  { id: "performance", label: "Performance", icon: BarChart3 },
   { id: "scoring", label: "Scoring", icon: Sliders },
 ];
 
@@ -58,14 +63,19 @@ function PricingContent() {
             <RateExplorerContent />
           </Suspense>
         )}
-        {activeTab === "market" && (
+        {activeTab === "suggestions" && (
           <Suspense fallback={<TabLoading />}>
-            <MarketPositionContent />
+            <OfferSuggestionsContent />
           </Suspense>
         )}
-        {activeTab === "alerts" && (
+        {activeTab === "queue" && (
           <Suspense fallback={<TabLoading />}>
-            <PriceAlertsContent />
+            <OfferQueueContent />
+          </Suspense>
+        )}
+        {activeTab === "performance" && (
+          <Suspense fallback={<TabLoading />}>
+            <PerformanceContent />
           </Suspense>
         )}
         {activeTab === "scoring" && (

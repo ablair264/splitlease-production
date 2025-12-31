@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Loader2, ChevronDown } from "lucide-react";
+import { Loader2 } from "lucide-react";
 
 interface RateMatrixExpansionProps {
   vehicleId: string;
@@ -16,19 +16,20 @@ interface Rate {
   monthlyRental: number;
   contractType: string;
   includesMaintenance: boolean;
+  annualMileage: number | null;
 }
 
-interface RatesMatrix {
-  contractHire: Rate[];
-  personalContractHire: Rate[];
+interface RatesResponse {
+  ratesByMileage: Record<number, {
+    contractHire: Rate[];
+    personalContractHire: Rate[];
+  }>;
   availableMileages: number[];
-  selectedMileage: number;
 }
 
 // Payment profile format - show as initial+subsequent
-// In UK leasing: "3+23" means 3 months upfront + 23 subsequent payments = 24 month term
 function formatPaymentProfile(initialMonths: number, term: number): string {
-  const subsequentPayments = term - 1; // Subsequent payments are always term minus 1
+  const subsequentPayments = term - 1;
   return `${initialMonths}+${subsequentPayments}`;
 }
 
@@ -58,24 +59,18 @@ interface RateCell {
 export function RateMatrixExpansion({ vehicleId, showMaintenance }: RateMatrixExpansionProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [ratesMatrix, setRatesMatrix] = useState<RatesMatrix | null>(null);
-  const [selectedMileage, setSelectedMileage] = useState<number | null>(null);
+  const [data, setData] = useState<RatesResponse | null>(null);
 
-  // Fetch rates matrix
+  // Fetch all rates
   useEffect(() => {
     const fetchRates = async () => {
       setIsLoading(true);
       setError(null);
       try {
-        const mileageParam = selectedMileage ? `?mileage=${selectedMileage}` : "";
-        const response = await fetch(`/api/admin/rates/vehicles/${vehicleId}/rates-matrix${mileageParam}`);
+        const response = await fetch(`/api/admin/rates/vehicles/${vehicleId}/rates-matrix`);
         if (!response.ok) throw new Error("Failed to fetch rates");
-        const data = await response.json();
-        setRatesMatrix(data);
-        // Set initial mileage from response if not already set
-        if (selectedMileage === null && data.selectedMileage) {
-          setSelectedMileage(data.selectedMileage);
-        }
+        const result = await response.json();
+        setData(result);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load rates");
       } finally {
@@ -84,7 +79,7 @@ export function RateMatrixExpansion({ vehicleId, showMaintenance }: RateMatrixEx
     };
 
     fetchRates();
-  }, [vehicleId, selectedMileage]);
+  }, [vehicleId]);
 
   if (isLoading) {
     return (
@@ -102,7 +97,7 @@ export function RateMatrixExpansion({ vehicleId, showMaintenance }: RateMatrixEx
     );
   }
 
-  if (!ratesMatrix) {
+  if (!data || data.availableMileages.length === 0) {
     return (
       <div className="py-4 text-center">
         <p className="text-white/50 text-xs">No rates available</p>
@@ -110,15 +105,16 @@ export function RateMatrixExpansion({ vehicleId, showMaintenance }: RateMatrixEx
     );
   }
 
+  // Standard initial payment options
+  const STANDARD_INITIALS = [1, 3, 6, 9, 12];
+
   // Calculate total payments for a payment profile
-  // e.g., 6+23 = 6 initial + 23 remaining = 29 total payments
   const getTotalPayments = (initialMonths: number, term: number): number => {
     const remaining = term - 1;
     return initialMonths + remaining;
   };
 
   // Estimate price based on known rate
-  // Formula: estimatedPrice = knownPrice × knownTotalPayments / targetTotalPayments
   const estimatePrice = (
     knownPrice: number,
     knownInitial: number,
@@ -129,9 +125,6 @@ export function RateMatrixExpansion({ vehicleId, showMaintenance }: RateMatrixEx
     const targetTotal = getTotalPayments(targetInitial, term);
     return Math.round(knownPrice * knownTotal / targetTotal);
   };
-
-  // Standard initial payment options
-  const STANDARD_INITIALS = [1, 3, 6, 9, 12];
 
   // Group rates and build matrix
   const groupRates = (rates: Rate[]) => {
@@ -165,7 +158,7 @@ export function RateMatrixExpansion({ vehicleId, showMaintenance }: RateMatrixEx
 
     const providers = Array.from(providerSet).sort();
 
-    // Create matrix: provider -> termProfile -> RateCell (with estimate flag)
+    // Create matrix: provider -> termProfile -> RateCell
     const matrix: Record<string, Record<string, RateCell>> = {};
     providers.forEach((provider) => {
       matrix[provider] = {};
@@ -185,7 +178,6 @@ export function RateMatrixExpansion({ vehicleId, showMaintenance }: RateMatrixEx
     // Calculate estimates for missing cells (only for non-maintenance rates)
     if (!showMaintenance) {
       providers.forEach((provider) => {
-        // Group profiles by term
         const termGroups = new Map<number, typeof termProfiles>();
         termProfiles.forEach((tp) => {
           if (!termGroups.has(tp.term)) {
@@ -194,9 +186,7 @@ export function RateMatrixExpansion({ vehicleId, showMaintenance }: RateMatrixEx
           termGroups.get(tp.term)!.push(tp);
         });
 
-        // For each term, try to estimate missing prices
         termGroups.forEach((profiles, term) => {
-          // Find a known price for this term from this provider
           let knownProfile: { initialPayment: number; price: number } | null = null;
           for (const tp of profiles) {
             const cell = matrix[provider][tp.key];
@@ -206,7 +196,6 @@ export function RateMatrixExpansion({ vehicleId, showMaintenance }: RateMatrixEx
             }
           }
 
-          // If we have a known price, estimate missing ones
           if (knownProfile) {
             profiles.forEach((tp) => {
               const cell = matrix[provider][tp.key];
@@ -225,8 +214,7 @@ export function RateMatrixExpansion({ vehicleId, showMaintenance }: RateMatrixEx
       });
     }
 
-    // Find best price for each column (only actual prices, not estimates)
-    // Only mark as "best" if it's meaningfully cheaper than competition (5%+ savings)
+    // Find best price for each column (only actual prices, 5%+ savings threshold)
     const bestPrices: Record<string, number> = {};
     termProfiles.forEach((tp) => {
       const actualPrices: number[] = [];
@@ -237,12 +225,10 @@ export function RateMatrixExpansion({ vehicleId, showMaintenance }: RateMatrixEx
         }
       });
 
-      // Need at least 2 providers with actual prices
       if (actualPrices.length >= 2) {
         actualPrices.sort((a, b) => a - b);
         const best = actualPrices[0];
         const secondBest = actualPrices[1];
-        // Only highlight if at least 5% cheaper than second best
         const savingsPercent = ((secondBest - best) / secondBest) * 100;
         if (savingsPercent >= 5) {
           bestPrices[tp.key] = best;
@@ -250,7 +236,7 @@ export function RateMatrixExpansion({ vehicleId, showMaintenance }: RateMatrixEx
       }
     });
 
-    // Find the OVERALL best price across all cells (actual prices only)
+    // Find overall best price
     let overallBestPrice: number | null = null;
     let overallBestKey: string | null = null;
     let overallBestProvider: string | null = null;
@@ -267,21 +253,16 @@ export function RateMatrixExpansion({ vehicleId, showMaintenance }: RateMatrixEx
       });
     });
 
-    return { termProfiles, providers, matrix, bestPrices, overallBestPrice, overallBestKey, overallBestProvider };
+    return { termProfiles, providers, matrix, bestPrices, overallBestKey, overallBestProvider };
   };
 
-  const renderMatrix = (rates: Rate[], title: string, isFirst: boolean = false) => {
+  const renderMatrix = (rates: Rate[], contractTypeLabel: string) => {
     if (rates.length === 0) return null;
 
     const { termProfiles, providers, matrix, bestPrices, overallBestKey, overallBestProvider } = groupRates(rates);
 
     if (termProfiles.length === 0) {
-      return (
-        <div className="mb-3">
-          <h4 className="text-xs font-semibold text-white/70 mb-2">{title}</h4>
-          <p className="text-white/40 text-[10px]">No rates available for current filter</p>
-        </div>
-      );
+      return null;
     }
 
     // Group columns by term for header
@@ -297,128 +278,143 @@ export function RateMatrixExpansion({ vehicleId, showMaintenance }: RateMatrixEx
     });
 
     return (
-      <div className="mb-2">
-        {/* Section header with title and mileage selector (only on first matrix) */}
-        <div className="flex items-center justify-between mb-1">
-          <h4 className="text-[10px] font-semibold text-white/60 uppercase tracking-wide">{title}</h4>
-          {isFirst && ratesMatrix && ratesMatrix.availableMileages.length > 1 && (
-            <div className="flex items-center gap-1.5">
-              <span className="text-[9px] text-white/40">Annual miles:</span>
-              <div className="relative">
-                <select
-                  value={selectedMileage ?? ratesMatrix.selectedMileage}
-                  onChange={(e) => setSelectedMileage(parseInt(e.target.value, 10))}
-                  className="appearance-none bg-white/5 border border-white/10 rounded px-1.5 py-0.5 pr-4 text-[10px] text-cyan-400 font-medium cursor-pointer hover:bg-white/10 hover:border-cyan-500/30 focus:outline-none focus:border-cyan-500/50"
+      <div className="overflow-x-auto">
+        <table className="w-full border-collapse text-xs">
+          <thead>
+            <tr className="border-b border-white/10">
+              <th className="px-2 py-1.5 text-left text-white/50 font-semibold sticky left-0 bg-[#0f1419] z-10 w-12" rowSpan={2}>
+                {contractTypeLabel}
+              </th>
+              {termGroups.map((group) => (
+                <th
+                  key={group.term}
+                  colSpan={group.profiles.length}
+                  className="px-1 py-1.5 text-center text-white/60 font-bold border-l border-white/10"
                 >
-                  {ratesMatrix.availableMileages.map((m) => (
-                    <option key={m} value={m} className="bg-[#1a1f25] text-white">
-                      {(m / 1000).toFixed(0)}k
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown className="absolute right-0.5 top-1/2 -translate-y-1/2 w-3 h-3 text-cyan-400/60 pointer-events-none" />
-              </div>
-            </div>
-          )}
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full border-collapse">
-            <thead>
-              {/* Term header row */}
-              <tr className="border-b border-white/10">
-                <th className="px-1 py-0.5 text-left text-white/40 font-medium sticky left-0 bg-[#0f1419] z-10 w-12 text-[10px]" rowSpan={2}>
-                  {/* Provider label */}
+                  {group.term}mo
                 </th>
-                {termGroups.map((group) => (
-                  <th
-                    key={group.term}
-                    colSpan={group.profiles.length}
-                    className="px-0.5 py-0.5 text-center text-white/50 font-semibold border-l border-white/10 text-xs"
-                  >
-                    {group.term}mo
-                  </th>
-                ))}
-              </tr>
-              {/* Payment profile header row */}
-              <tr className="border-b border-white/10">
-                {termProfiles.map((tp, idx) => {
-                  const isFirstInGroup = idx === 0 || termProfiles[idx - 1].term !== tp.term;
-                  return (
-                    <th
-                      key={tp.key}
-                      className={`px-1 py-0.5 text-center text-white/60 font-medium min-w-[52px] text-xs ${isFirstInGroup ? "border-l border-white/10" : ""}`}
-                    >
-                      {formatPaymentProfile(tp.initialPayment, tp.term)}
-                    </th>
-                  );
-                })}
-              </tr>
-            </thead>
-            <tbody>
-              {providers.map((provider) => {
-                const style = PROVIDER_COLORS[provider] || { bg: "rgba(255, 255, 255, 0.1)", text: "#ffffff" };
+              ))}
+            </tr>
+            <tr className="border-b border-white/10">
+              {termProfiles.map((tp, idx) => {
+                const isFirstInGroup = idx === 0 || termProfiles[idx - 1].term !== tp.term;
                 return (
-                  <tr key={provider} className="border-b border-white/5 hover:bg-white/[0.02]">
-                    <td
-                      className="px-1.5 py-1 sticky left-0 bg-[#0f1419] z-10 text-[11px]"
-                      style={{ color: style.text }}
-                    >
-                      <span className="font-semibold">{PROVIDER_SHORT[provider] || provider.toUpperCase()}</span>
-                    </td>
-                    {termProfiles.map((tp, idx) => {
-                      const cell = matrix[provider][tp.key];
-                      const price = cell.price;
-                      const isEstimate = cell.isEstimate;
-                      const isBest = price !== null && !isEstimate && price === bestPrices[tp.key];
-                      const isOverallBest = tp.key === overallBestKey && provider === overallBestProvider;
-                      const isFirstInGroup = idx === 0 || termProfiles[idx - 1].term !== tp.term;
-
-                      return (
-                        <td
-                          key={tp.key}
-                          className={`px-1 py-1 text-center text-xs ${
-                            isFirstInGroup ? "border-l border-white/10" : ""
-                          } ${
-                            isOverallBest
-                              ? "text-cyan-400 font-bold"
-                              : isEstimate
-                                ? "text-amber-400/70 italic font-normal"
-                                : isBest
-                                  ? "text-emerald-400 font-semibold"
-                                  : price
-                                    ? "text-white/80 font-semibold"
-                                    : "text-white/20"
-                          }`}
-                          style={
-                            isOverallBest
-                              ? { background: "rgba(121, 213, 233, 0.15)", boxShadow: "inset 0 0 0 2px rgba(121, 213, 233, 0.5)" }
-                              : isBest
-                                ? { background: "rgba(16, 185, 129, 0.08)" }
-                                : {}
-                          }
-                          title={isOverallBest ? "Best price (shown in badge)" : isEstimate ? "Estimated price" : undefined}
-                        >
-                          {price !== null ? `£${price}` : "-"}
-                        </td>
-                      );
-                    })}
-                  </tr>
+                  <th
+                    key={tp.key}
+                    className={`px-1 py-1 text-center text-white/50 font-medium min-w-[52px] ${isFirstInGroup ? "border-l border-white/10" : ""}`}
+                  >
+                    {formatPaymentProfile(tp.initialPayment, tp.term)}
+                  </th>
                 );
               })}
-            </tbody>
-          </table>
+            </tr>
+          </thead>
+          <tbody>
+            {providers.map((provider) => {
+              const style = PROVIDER_COLORS[provider] || { bg: "rgba(255, 255, 255, 0.1)", text: "#ffffff" };
+              return (
+                <tr key={provider} className="border-b border-white/5 hover:bg-white/[0.02]">
+                  <td
+                    className="px-2 py-1.5 sticky left-0 bg-[#0f1419] z-10"
+                    style={{ color: style.text }}
+                  >
+                    <span className="font-bold">{PROVIDER_SHORT[provider] || provider.toUpperCase()}</span>
+                  </td>
+                  {termProfiles.map((tp, idx) => {
+                    const cell = matrix[provider][tp.key];
+                    const price = cell.price;
+                    const isEstimate = cell.isEstimate;
+                    const isBest = price !== null && !isEstimate && price === bestPrices[tp.key];
+                    const isOverallBest = tp.key === overallBestKey && provider === overallBestProvider;
+                    const isFirstInGroup = idx === 0 || termProfiles[idx - 1].term !== tp.term;
+
+                    return (
+                      <td
+                        key={tp.key}
+                        className={`px-1 py-1.5 text-center ${
+                          isFirstInGroup ? "border-l border-white/10" : ""
+                        } ${
+                          isOverallBest
+                            ? "text-cyan-400 font-bold"
+                            : isEstimate
+                              ? "text-amber-400/70 italic"
+                              : isBest
+                                ? "text-emerald-400 font-semibold"
+                                : price
+                                  ? "text-white/90 font-medium"
+                                  : "text-white/20"
+                        }`}
+                        style={
+                          isOverallBest
+                            ? { background: "rgba(121, 213, 233, 0.15)", boxShadow: "inset 0 0 0 1px rgba(121, 213, 233, 0.5)" }
+                            : isBest
+                              ? { background: "rgba(16, 185, 129, 0.08)" }
+                              : {}
+                        }
+                        title={isOverallBest ? "Best price" : isEstimate ? "Estimated" : undefined}
+                      >
+                        {price !== null ? `£${price}` : "-"}
+                      </td>
+                    );
+                  })}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    );
+  };
+
+  const renderMileageSection = (mileage: number) => {
+    const mileageData = data.ratesByMileage[mileage];
+    if (!mileageData) return null;
+
+    const hasContractHire = mileageData.contractHire.length > 0;
+    const hasPersonalContractHire = mileageData.personalContractHire.length > 0;
+
+    // Filter by maintenance preference to check if we have data to show
+    const filteredCH = mileageData.contractHire.filter((r) =>
+      showMaintenance ? r.includesMaintenance : !r.includesMaintenance
+    );
+    const filteredPCH = mileageData.personalContractHire.filter((r) =>
+      showMaintenance ? r.includesMaintenance : !r.includesMaintenance
+    );
+
+    if (filteredCH.length === 0 && filteredPCH.length === 0) {
+      return null;
+    }
+
+    return (
+      <div key={mileage} className="mb-3 last:mb-0">
+        {/* Mileage header */}
+        <div className="flex items-center gap-2 mb-1.5">
+          <span className="text-xs font-bold text-cyan-400">
+            {(mileage / 1000).toFixed(0)}k miles/year
+          </span>
+          <div className="flex-1 h-px bg-white/10" />
         </div>
+
+        {/* Contract Hire */}
+        {filteredCH.length > 0 && (
+          <div className="mb-1">
+            {renderMatrix(mileageData.contractHire, "CH")}
+          </div>
+        )}
+
+        {/* Personal Contract Hire */}
+        {filteredPCH.length > 0 && (
+          <div>
+            {renderMatrix(mileageData.personalContractHire, "PCH")}
+          </div>
+        )}
       </div>
     );
   };
 
   return (
-    <div className="px-2 pt-1 pb-1.5">
-      {/* Contract Hire Matrix */}
-      {renderMatrix(ratesMatrix.contractHire, "Contract Hire", true)}
-
-      {/* Personal Contract Hire Matrix */}
-      {renderMatrix(ratesMatrix.personalContractHire, "Personal Contract Hire")}
+    <div className="px-3 py-2 space-y-2">
+      {data.availableMileages.map((mileage) => renderMileageSection(mileage))}
     </div>
   );
 }

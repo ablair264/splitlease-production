@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { providerRates, ratebookImports } from "@/lib/db/schema";
-import { eq, and, sql } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 
 // Provider display names
 const PROVIDER_NAMES: Record<string, string> = {
@@ -47,31 +47,8 @@ export async function GET(
 ) {
   try {
     const { id: vehicleId } = await params;
-    const { searchParams } = new URL(request.url);
-    const mileageParam = searchParams.get("mileage");
-    const selectedMileage = mileageParam ? parseInt(mileageParam, 10) : null;
 
-    // First, get available mileage options for this vehicle
-    const mileageOptions = await db
-      .selectDistinct({ annualMileage: providerRates.annualMileage })
-      .from(providerRates)
-      .innerJoin(ratebookImports, eq(providerRates.importId, ratebookImports.id))
-      .where(
-        and(
-          eq(providerRates.vehicleId, vehicleId),
-          eq(ratebookImports.isLatest, true)
-        )
-      )
-      .orderBy(providerRates.annualMileage);
-
-    const availableMileages = mileageOptions
-      .map((m) => m.annualMileage)
-      .filter((m): m is number => m !== null);
-
-    // Use selected mileage or default to first available (usually 10000)
-    const mileageToUse = selectedMileage ?? availableMileages[0] ?? 10000;
-
-    // Get all rates for this vehicle from latest ratebooks, filtered by mileage
+    // Get ALL rates for this vehicle from latest ratebooks (no mileage filter)
     const rates = await db
       .select({
         providerCode: providerRates.providerCode,
@@ -86,16 +63,25 @@ export async function GET(
       .where(
         and(
           eq(providerRates.vehicleId, vehicleId),
-          eq(ratebookImports.isLatest, true),
-          eq(providerRates.annualMileage, mileageToUse)
+          eq(ratebookImports.isLatest, true)
         )
       )
       .orderBy(
+        providerRates.annualMileage,
         providerRates.providerCode,
         providerRates.term
       );
 
-    // Transform rates
+    // Get unique mileages
+    const mileageSet = new Set<number>();
+    rates.forEach((r) => {
+      if (r.annualMileage !== null) {
+        mileageSet.add(r.annualMileage);
+      }
+    });
+    const availableMileages = Array.from(mileageSet).sort((a, b) => a - b);
+
+    // Transform rates with mileage included
     const transformedRates = rates.map((rate) => ({
       providerCode: rate.providerCode,
       providerName: PROVIDER_NAMES[rate.providerCode] || rate.providerCode,
@@ -104,21 +90,30 @@ export async function GET(
       monthlyRental: Math.round(Number(rate.monthlyRental) / 100),
       contractType: rate.contractType,
       includesMaintenance: hasMaintenance(rate.contractType),
+      annualMileage: rate.annualMileage,
     }));
 
-    // Split into Contract Hire and Personal Contract Hire
-    const contractHire = transformedRates.filter(
-      (r) => r.contractType === "CH" || r.contractType === "CHNM"
-    );
-    const personalContractHire = transformedRates.filter(
-      (r) => r.contractType === "PCH" || r.contractType === "PCHNM"
-    );
+    // Group by mileage, then by contract type
+    const ratesByMileage: Record<number, {
+      contractHire: typeof transformedRates;
+      personalContractHire: typeof transformedRates;
+    }> = {};
+
+    availableMileages.forEach((mileage) => {
+      const mileageRates = transformedRates.filter((r) => r.annualMileage === mileage);
+      ratesByMileage[mileage] = {
+        contractHire: mileageRates.filter(
+          (r) => r.contractType === "CH" || r.contractType === "CHNM"
+        ),
+        personalContractHire: mileageRates.filter(
+          (r) => r.contractType === "PCH" || r.contractType === "PCHNM"
+        ),
+      };
+    });
 
     return NextResponse.json({
-      contractHire,
-      personalContractHire,
+      ratesByMileage,
       availableMileages,
-      selectedMileage: mileageToUse,
     });
   } catch (error) {
     console.error("Error fetching rates matrix:", error);
