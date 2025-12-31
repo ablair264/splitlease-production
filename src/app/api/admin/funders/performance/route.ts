@@ -53,9 +53,23 @@ const PROVIDER_NAMES: Record<string, string> = {
   ogilvie: "Ogilvie Fleet",
   venus: "Venus",
   drivalia: "Drivalia",
+  ald: "ALD Automotive",
+  arval: "Arval",
+  alphabet: "Alphabet",
+  zenith: "Zenith",
+  leasys: "Leasys",
 };
 
-const ALL_PROVIDERS = ["lex", "ogilvie", "venus", "drivalia"];
+// Dynamically fetch providers from DB instead of hardcoding
+async function getActiveProviders(): Promise<string[]> {
+  const result = await db
+    .selectDistinct({ providerCode: providerRates.providerCode })
+    .from(providerRates)
+    .innerJoin(ratebookImports, eq(providerRates.importId, ratebookImports.id))
+    .where(eq(ratebookImports.isLatest, true));
+
+  return result.map(r => r.providerCode).filter(Boolean) as string[];
+}
 
 /**
  * GET /api/admin/funders/performance
@@ -80,10 +94,13 @@ export async function GET(req: NextRequest) {
     // Build conditions for latest rates
     const baseConditions = [eq(ratebookImports.isLatest, true)];
 
+    // Get all active providers dynamically
+    const activeProviders = await getActiveProviders();
+
     // Get metrics per provider
     const funderMetrics: FunderPerformanceMetrics[] = [];
 
-    for (const providerCode of ALL_PROVIDERS) {
+    for (const providerCode of activeProviders) {
       const conditions = [...baseConditions, eq(providerRates.providerCode, providerCode)];
       if (contractType) {
         conditions.push(eq(providerRates.contractType, contractType));
@@ -218,7 +235,7 @@ export async function GET(req: NextRequest) {
       // Build comparison data (only for vehicles with multiple providers)
       if (prices.length > 1) {
         const priceRecord: Record<string, number | null> = {};
-        for (const provider of ALL_PROVIDERS) {
+        for (const provider of activeProviders) {
           priceRecord[provider] = data.prices[provider]
             ? Math.round(data.prices[provider] / 100)
             : null;

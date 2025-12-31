@@ -53,8 +53,21 @@ export async function generateIntelligenceData(
   const threats: Threat[] = [];
 
   for (const deal of competitorDeals) {
-    const key = `${deal.manufacturer.toLowerCase()}|${deal.model.toLowerCase()}`;
-    const ourRates = ourRatesMap.get(key);
+    // Try exact match first
+    const exactKey = `${deal.manufacturer.toLowerCase()}|${deal.model.toLowerCase()}`;
+    let ourRates = ourRatesMap.get(exactKey);
+
+    // If no exact match, try fuzzy matching
+    if (!ourRates || ourRates.length === 0) {
+      for (const [mapKey, rates] of ourRatesMap) {
+        const [ourMfr, ourModel] = mapKey.split('|');
+        if (makeModelMatch(deal.manufacturer, deal.model, ourMfr, ourModel)) {
+          ourRates = rates;
+          break;
+        }
+      }
+    }
+
     const popularityCount = resolvePopularityCount(
       ourCounts,
       deal.manufacturer,
@@ -260,12 +273,17 @@ export function normalizeManufacturer(name: string): string {
 
 /**
  * Normalize model names for matching
+ * Strips common body type suffixes for better fuzzy matching
  */
 export function normalizeModel(name: string): string {
   return name
     .toLowerCase()
-    .replace(/[\s-]+/g, '')
-    .replace(/['"]/g, '');
+    .replace(/[\s-]+/g, ' ')
+    .replace(/['"]/g, '')
+    // Remove common body type suffixes
+    .replace(/\s+(suv|hatchback|saloon|estate|coupe|convertible|cabriolet|roadster|wagon|van|mpv|crossover|pickup|pick-up|electric|hybrid|phev)$/gi, '')
+    .replace(/\s+/g, '')
+    .trim();
 }
 
 /**

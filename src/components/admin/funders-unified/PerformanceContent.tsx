@@ -21,6 +21,11 @@ const PROVIDER_COLORS: Record<string, { bg: string; text: string; bar: string }>
   ogilvie: { bg: "rgba(97, 188, 142, 0.15)", text: "#61bc8e", bar: "#61bc8e" },
   venus: { bg: "rgba(248, 216, 36, 0.15)", text: "#f8d824", bar: "#f8d824" },
   drivalia: { bg: "rgba(247, 125, 17, 0.15)", text: "#f77d11", bar: "#f77d11" },
+  ald: { bg: "rgba(168, 85, 247, 0.15)", text: "#a855f7", bar: "#a855f7" },
+  arval: { bg: "rgba(236, 72, 153, 0.15)", text: "#ec4899", bar: "#ec4899" },
+  alphabet: { bg: "rgba(59, 130, 246, 0.15)", text: "#3b82f6", bar: "#3b82f6" },
+  zenith: { bg: "rgba(234, 179, 8, 0.15)", text: "#eab308", bar: "#eab308" },
+  leasys: { bg: "rgba(20, 184, 166, 0.15)", text: "#14b8a6", bar: "#14b8a6" },
 };
 
 export default function PerformanceContent() {
@@ -194,13 +199,13 @@ export default function PerformanceContent() {
                     <th className="px-4 py-3 text-left text-xs font-medium text-white/50 uppercase">
                       Vehicle
                     </th>
-                    {["lex", "ogilvie", "venus", "drivalia"].map((code) => (
+                    {data.funders.filter(f => f.totalVehicles > 0).map((funder) => (
                       <th
-                        key={code}
+                        key={funder.code}
                         className="px-4 py-3 text-right text-xs font-medium uppercase"
-                        style={{ color: PROVIDER_COLORS[code]?.text }}
+                        style={{ color: PROVIDER_COLORS[funder.code]?.text || "#ffffff" }}
                       >
-                        {code}
+                        {funder.code}
                       </th>
                     ))}
                     <th className="px-4 py-3 text-right text-xs font-medium text-white/50 uppercase">
@@ -214,6 +219,7 @@ export default function PerformanceContent() {
                       key={comp.capCode}
                       comparison={comp}
                       formatPrice={formatPrice}
+                      providerCodes={data.funders.filter(f => f.totalVehicles > 0).map(f => f.code)}
                     />
                   ))}
                 </tbody>
@@ -391,13 +397,15 @@ function FunderCard({
 function ComparisonRow({
   comparison,
   formatPrice,
+  providerCodes,
 }: {
   comparison: FunderComparisonData;
   formatPrice: (n: number) => string;
+  providerCodes: string[];
 }) {
-  const providers = ["lex", "ogilvie", "venus", "drivalia"];
-  const prices = providers.map((p) => comparison.prices[p]);
-  const minPrice = Math.min(...prices.filter((p): p is number => p !== null));
+  const prices = providerCodes.map((p) => comparison.prices[p]);
+  const validPrices = prices.filter((p): p is number => p !== null && p !== undefined);
+  const minPrice = validPrices.length > 0 ? Math.min(...validPrices) : null;
 
   return (
     <tr className="hover:bg-white/[0.02] transition-colors">
@@ -407,17 +415,17 @@ function ComparisonRow({
         </div>
         <div className="text-xs text-white/40">{comparison.capCode}</div>
       </td>
-      {providers.map((code) => {
+      {providerCodes.map((code) => {
         const price = comparison.prices[code];
-        const isBest = price === minPrice;
+        const isBest = price !== null && price !== undefined && price === minPrice;
         const colors = PROVIDER_COLORS[code];
 
         return (
           <td key={code} className="px-4 py-3 text-right">
-            {price !== null ? (
+            {price !== null && price !== undefined ? (
               <span
                 className={`text-sm font-medium ${isBest ? "font-bold" : ""}`}
-                style={{ color: isBest ? colors?.text : "rgba(255,255,255,0.6)" }}
+                style={{ color: isBest ? colors?.text || "#ffffff" : "rgba(255,255,255,0.6)" }}
               >
                 {formatPrice(price)}
                 {isBest && <Trophy className="w-3 h-3 inline ml-1" />}
