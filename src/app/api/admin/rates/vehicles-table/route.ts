@@ -75,11 +75,12 @@ export async function GET(request: NextRequest) {
     // Vehicle category filter (cars vs vans)
     // Uses isCommercial flag AND model/variant pattern matching for reliability
     // Common van models: Transit, Sprinter, Crafter, Transporter, Vivaro, Dispatch, Expert, Combo, Berlingo, Partner, Caddy, etc.
+    // Also includes abbreviated names (Trn = Transit) and minibuses
     const vanPatterns = sql`(
       ${providerRates.isCommercial} = true
-      OR LOWER(${providerRates.model}) ~ '(transit|sprinter|crafter|transporter|vivaro|dispatch|expert|combo|berlingo|partner|caddy|proace|talento|scudo|ducato|boxer|relay|master|movano|interstar|trafic|primastar|nv200|nv300|nv400|e-nv200|townstar|promaster|metris|hiace|dyna|hilux|ranger|l200|amarok|navara|d-max|fullback|wrangler|defender|pickup|van|lcv|swb|mwb|lwb|panel|chassis|dropside|tipper|luton|flatbed)'
-      OR LOWER(${providerRates.variant}) ~ '(van|panel|kombi|chassis|dropside|tipper|luton|flatbed|pickup|crew.?cab|double.?cab|king.?cab)'
-      OR LOWER(${providerRates.bodyStyle}) ~ '(van|panel|pickup|commercial|lcv)'
+      OR LOWER(${providerRates.model}) ~ '(transit|trn|sprinter|crafter|transporter|vivaro|dispatch|expert|combo|berlingo|partner|caddy|proace|talento|scudo|ducato|boxer|relay|master|movano|interstar|trafic|primastar|nv200|nv300|nv400|e-nv200|townstar|promaster|metris|hiace|dyna|hilux|ranger|l200|amarok|navara|d-max|fullback|wrangler|defender|pickup|van|lcv|swb|mwb|lwb|panel|chassis|dropside|tipper|luton|flatbed|minibus|mnbs)'
+      OR LOWER(${providerRates.variant}) ~ '(van|panel|kombi|chassis|dropside|tipper|luton|flatbed|pickup|crew.?cab|double.?cab|king.?cab|minibus|mnbs|l[1-4]h[1-3])'
+      OR LOWER(${providerRates.bodyStyle}) ~ '(van|panel|pickup|commercial|lcv|minibus)'
     )`;
 
     if (vehicleCategory === "cars") {
@@ -400,12 +401,15 @@ export async function GET(request: NextRequest) {
       let comparison = 0;
       switch (sortBy) {
         case "bestScore":
+        case "score":
           comparison = a.bestScore - b.bestScore;
           break;
         case "price":
+        case "bestFunder":
           comparison = a.bestFunder.priceGbp - b.bestFunder.priceGbp;
           break;
         case "p11d":
+        case "p11dGbp":
           comparison = a.p11dGbp - b.p11dGbp;
           break;
         case "manufacturer":
@@ -414,10 +418,15 @@ export async function GET(request: NextRequest) {
         case "model":
           comparison = a.model.localeCompare(b.model);
           break;
+        case "fuelType":
+          comparison = (a.fuelType || "").localeCompare(b.fuelType || "");
+          break;
         case "providerCount":
+        case "strength":
           comparison = a.providerCount - b.providerCount;
           break;
         case "integrityDays":
+        case "integrity":
           comparison = a.integrityDays - b.integrityDays;
           break;
         case "isSpecialOffer":
@@ -428,6 +437,10 @@ export async function GET(request: NextRequest) {
         case "marketPosition":
           // Sort by percentile (lower = better market position)
           comparison = (a.marketPosition?.percentile ?? 50) - (b.marketPosition?.percentile ?? 50);
+          break;
+        case "otrOpportunity":
+          // Sort by savings amount (higher = better opportunity)
+          comparison = (a.termsHolderOtr?.savingsGbp ?? 0) - (b.termsHolderOtr?.savingsGbp ?? 0);
           break;
         default:
           comparison = a.bestScore - b.bestScore;

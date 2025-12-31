@@ -4,9 +4,10 @@ import { useState, useEffect, useCallback } from "react";
 import { OgilvieLoginForm } from "@/components/ogilvie/login-form";
 import { OgilvieExportForm } from "@/components/ogilvie/export-form";
 import { OgilvieExportsTable } from "@/components/ogilvie/exports-table";
-import { Download, History, LogIn } from "lucide-react";
+import { OgilvieImportsTable } from "@/components/ogilvie/imports-table";
+import { Download, History, Database, LogIn } from "lucide-react";
 
-type Tab = "export" | "history";
+type Tab = "export" | "history" | "imports";
 
 type SessionStatus = {
   valid: boolean;
@@ -44,12 +45,13 @@ export default function OgilvieContent() {
 
   const handleExportComplete = () => {
     setRefreshKey((k) => k + 1);
-    setActiveTab("history");
+    setActiveTab("imports");
   };
 
   const tabs: { id: Tab; label: string; icon: React.ElementType }[] = [
     { id: "export", label: "Run Export", icon: Download },
-    { id: "history", label: "Export History", icon: History },
+    { id: "imports", label: "Imports", icon: Database },
+    { id: "history", label: "Exports", icon: History },
   ];
 
   return (
@@ -128,6 +130,10 @@ export default function OgilvieContent() {
             </div>
           </div>
         </div>
+      )}
+
+      {activeTab === "imports" && (
+        <OgilvieImportsTable refreshTrigger={refreshKey} />
       )}
 
       {activeTab === "history" && (

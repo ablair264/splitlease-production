@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 import { ratebookImports, providerRates, financeProviders, vehicles, ogilvieCapMappings } from "@/lib/db/schema";
-import { eq, and, inArray } from "drizzle-orm";
+import { eq, and, inArray, sql } from "drizzle-orm";
 import { createHash } from "crypto";
 import { parse } from "csv-parse/sync";
 import { getCapCodeForVehicle, generateSourceKey, saveMatchResult, findCapCodeMatch, lookupOgilvieCapMapping } from "@/lib/matching/vehicle-matcher";
@@ -446,6 +446,17 @@ export async function importOgilvieRatebook(options: OgilvieImportOptions): Prom
       completedAt: new Date(),
     })
     .where(eq(ratebookImports.id, importId));
+
+  // Match vehicle IDs for this import using PostgreSQL function
+  // This handles: cap_code match → cap_id match → ogilvie_cap_mappings lookup
+  try {
+    await db.execute(
+      sql`SELECT * FROM match_ogilvie_vehicle_ids_for_import(${importId}::uuid)`
+    );
+  } catch (e) {
+    console.error("Failed to match vehicle IDs for import:", e);
+    // Non-fatal - rates are still imported, just without vehicle_id links
+  }
 
   return {
     success: finalStatus === "completed",
