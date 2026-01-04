@@ -160,6 +160,7 @@ function SmartImportModal({
   }> | null>(null);
   const [isLoadingPreview, setIsLoadingPreview] = useState(false);
   const [forceReimport, setForceReimport] = useState(false);
+  const [isLargeFile, setIsLargeFile] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Available target fields for column mapping - matches provider_rates schema
@@ -226,6 +227,11 @@ function SmartImportModal({
     { code: "other", name: "Other" },
   ];
 
+  // Railway API URL - used for direct upload of large files (bypass Netlify 6MB limit)
+  const RAILWAY_API = process.env.NEXT_PUBLIC_API_URL || "https://splitfin-broker-production.up.railway.app";
+  // Netlify has a 6MB limit, base64 increases size by ~33%, so 4MB is safe threshold
+  const LARGE_FILE_THRESHOLD = 4 * 1024 * 1024; // 4MB
+
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
     if (!selectedFile) return;
@@ -248,23 +254,97 @@ function SmartImportModal({
     );
     setFileContent(base64);
 
+    // Check if file is too large for Netlify (6MB limit, base64 increases size by ~33%)
+    const fileTooLarge = selectedFile.size > LARGE_FILE_THRESHOLD;
+    setIsLargeFile(fileTooLarge);
+
     // Analyze file using smart import API
     setIsAnalyzing(true);
     try {
-      const response = await fetch("/api/smart-import", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          fileName: selectedFile.name,
-          fileContent: base64,
-          action: "analyze",
-        }),
-      });
+      let data: AnalysisResult;
 
-      const data = await response.json();
+      if (fileTooLarge) {
+        // For large files, do lightweight local analysis to detect columns
+        // Only read first 50KB for header detection to avoid memory issues
+        console.log(`Large file detected (${(selectedFile.size / 1024 / 1024).toFixed(2)} MB), using local header analysis`);
 
-      if (!response.ok) {
-        throw new Error(data.error || "Failed to analyze file");
+        // Read first chunk of file (50KB should be enough for headers)
+        const headerChunk = await selectedFile.slice(0, 50 * 1024).text();
+        const lines = headerChunk.split('\n');
+        const headerLine = lines[0];
+
+        // Parse CSV header manually
+        const headers = headerLine.split(',').map(h => h.replace(/["']/g, '').trim());
+
+        // Simple column detection for common fields
+        const detectColumnMapping = (header: string, index: number): ColumnMappingItem | null => {
+          const h = header.toLowerCase().replace(/[\s_-]+/g, '');
+
+          const patterns: Record<string, string[]> = {
+            capCode: ["capcode", "cap_code", "lookupcode"],
+            capId: ["capid", "cap_id", "dataoriginatorcode"],
+            manufacturer: ["manufacturer", "make", "brand"],
+            model: ["model", "modelname", "model_name"],
+            variant: ["variant", "derivative", "vehicledescription", "description"],
+            modelYear: ["modelyear", "model_year", "year"],
+            term: ["term", "contractterm", "months"],
+            annualMileage: ["mileage", "annualmileage", "annual_mileage", "miles"],
+            monthlyRental: ["rental", "monthly", "netrental", "price", "rate"],
+            p11d: ["p11d", "p11_d", "listprice"],
+            otr: ["otr", "ontheroad"],
+            co2: ["co2", "emissions"],
+            fuelType: ["fuel", "fueltype", "fuel_type"],
+            transmission: ["transmission", "trans", "gearbox"],
+          };
+
+          for (const [field, fieldPatterns] of Object.entries(patterns)) {
+            if (fieldPatterns.some(p => h === p || (p.length >= 4 && h.includes(p)))) {
+              return {
+                sourceColumn: index,
+                sourceHeader: header,
+                targetField: field,
+                confidence: h === fieldPatterns[0] ? 100 : 75,
+              };
+            }
+          }
+          return null;
+        };
+
+        const detectedColumns: ColumnMappingItem[] = headers
+          .map((h, i) => detectColumnMapping(h, i))
+          .filter((m): m is ColumnMappingItem => m !== null);
+
+        // Create synthetic analysis result
+        data = {
+          format: "tabular" as const,
+          confidence: 80,
+          reason: `Large file - analyzed ${headers.length} columns from header row`,
+          sheets: [{
+            name: "Sheet1",
+            format: "tabular",
+            headerRow: 0,
+            columns: detectedColumns,
+          }],
+          preview: [], // No preview for large files during initial analysis
+        };
+      } else {
+        // For smaller files, use the Netlify API route
+        const response = await fetch("/api/smart-import", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            fileName: selectedFile.name,
+            fileContent: base64,
+            action: "analyze",
+          }),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.error || "Failed to analyze file");
+        }
+
+        data = await response.json();
       }
 
       setAnalysisResult(data);
@@ -301,41 +381,74 @@ function SmartImportModal({
     setError(null);
 
     try {
-      const response = await fetch("/api/smart-import", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          fileName: file.name,
-          fileContent,
-          providerCode,
-          contractType: contractType || undefined,
-          action: "import",
-          dryRun: false,
-          forceReimport,
-          // Pass custom column mappings for tabular format
-          columnMappings: columnMappings.length > 0
-            ? columnMappings.reduce((acc, m) => {
-                if (m.targetField) {
-                  acc[m.sourceColumn] = m.targetField;
-                }
-                return acc;
-              }, {} as Record<number, string>)
-            : undefined,
-        }),
-      });
+      // Build column mappings for tabular format
+      const mappingsObj = columnMappings.length > 0
+        ? columnMappings.reduce((acc, m) => {
+            if (m.targetField) {
+              acc[m.sourceColumn] = m.targetField;
+            }
+            return acc;
+          }, {} as Record<number, string>)
+        : undefined;
 
-      const data = await response.json();
+      let data;
 
-      if (!response.ok) {
-        throw new Error(data.error || "Import failed");
+      if (isLargeFile) {
+        // For large files, send directly to Railway to bypass Netlify's 6MB limit
+        console.log(`Importing large file directly to Railway...`);
+        const endpoint = mappingsObj
+          ? `${RAILWAY_API}/api/admin/ratebooks/import-with-mappings`
+          : `${RAILWAY_API}/api/admin/ratebooks/import`;
+
+        const response = await fetch(endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            fileName: file.name,
+            fileContent,
+            providerCode,
+            contractType: contractType || "BCH",
+            columnMappings: mappingsObj,
+          }),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.error || `Import failed (${response.status})`);
+        }
+
+        data = await response.json();
+      } else {
+        // For smaller files, use the Netlify API route
+        const response = await fetch("/api/smart-import", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            fileName: file.name,
+            fileContent,
+            providerCode,
+            contractType: contractType || undefined,
+            action: "import",
+            dryRun: false,
+            forceReimport,
+            columnMappings: mappingsObj,
+          }),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.error || "Import failed");
+        }
+
+        data = await response.json();
       }
 
       setResult({
         success: data.success,
         stats: {
-          totalRows: data.totalRates || 0,
-          successRows: data.successRates || 0,
-          errorRows: data.errorRates || 0,
+          totalRows: data.totalRates || data.totalRows || 0,
+          successRows: data.successRates || data.successRows || 0,
+          errorRows: data.errorRates || data.errorRows || 0,
         },
         errors: data.errors,
       });
@@ -360,6 +473,7 @@ function SmartImportModal({
     setColumnMappings([]);
     setPreviewData(null);
     setForceReimport(false);
+    setIsLargeFile(false);
     setStep("upload");
   };
 
@@ -404,25 +518,50 @@ function SmartImportModal({
         }
       }
 
-      // Do a dry-run import with custom column mappings to get accurate preview
-      const response = await fetch("/api/smart-import", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          fileName: file?.name,
-          fileContent: fileContent,
-          providerCode: providerCode || "preview",
-          contractType: contractType || undefined,
-          action: "import",
-          dryRun: true,
-          columnMappings: mappingsObj,
-        }),
-      });
+      let data;
 
-      const data = await response.json();
+      if (isLargeFile) {
+        // For large files, send directly to Railway to bypass Netlify's 6MB limit
+        const response = await fetch(`${RAILWAY_API}/api/admin/ratebooks/preview`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            fileName: file?.name,
+            fileContent: fileContent,
+            providerCode: providerCode || "preview",
+            contractType: contractType || undefined,
+            columnMappings: mappingsObj,
+          }),
+        });
 
-      if (!response.ok) {
-        throw new Error(data.error || "Failed to generate preview");
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.error || `Failed to generate preview (${response.status})`);
+        }
+
+        data = await response.json();
+      } else {
+        // For smaller files, use the Netlify API route
+        const response = await fetch("/api/smart-import", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            fileName: file?.name,
+            fileContent: fileContent,
+            providerCode: providerCode || "preview",
+            contractType: contractType || undefined,
+            action: "import",
+            dryRun: true,
+            columnMappings: mappingsObj,
+          }),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.error || "Failed to generate preview");
+        }
+
+        data = await response.json();
       }
 
       // Use the sampleRates from the dry-run as preview
@@ -566,9 +705,16 @@ function SmartImportModal({
                           </div>
                         </div>
                       ) : file ? (
-                        <div className="flex items-center justify-center gap-2 text-purple-400">
-                          <FileSpreadsheet className="w-5 h-5" />
-                          <span className="text-sm">{file.name}</span>
+                        <div className="flex flex-col items-center justify-center gap-2">
+                          <div className="flex items-center gap-2 text-purple-400">
+                            <FileSpreadsheet className="w-5 h-5" />
+                            <span className="text-sm">{file.name}</span>
+                          </div>
+                          {isLargeFile && (
+                            <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                              Large file ({(file.size / 1024 / 1024).toFixed(1)} MB) - Direct upload to server
+                            </span>
+                          )}
                         </div>
                       ) : (
                         <div className="text-white/40">
@@ -592,6 +738,16 @@ function SmartImportModal({
 
             {step === "mapping" && columnMappings.length > 0 && (
               <>
+                {/* Large file notice */}
+                {isLargeFile && (
+                  <div className="p-4 rounded-lg bg-gradient-to-r from-amber-500/10 to-orange-500/10 border border-amber-500/20 mb-4">
+                    <p className="text-sm text-amber-400">
+                      <strong>Large file detected</strong> ({file && (file.size / 1024 / 1024).toFixed(1)} MB) -
+                      This file will be uploaded directly to the server for processing. Preview generation may take longer.
+                    </p>
+                  </div>
+                )}
+
                 {/* Description */}
                 <div className="p-4 rounded-lg bg-gradient-to-r from-blue-500/10 to-cyan-500/10 border border-blue-500/20 mb-4">
                   <p className="text-sm text-white/70">
