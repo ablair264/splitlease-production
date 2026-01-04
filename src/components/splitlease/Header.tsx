@@ -16,6 +16,7 @@ import {
   HelpCircle,
   Info,
   MessageCircle,
+  BatteryCharging,
 } from "lucide-react";
 import VoiceCallButton from "./VoiceCallButton";
 
@@ -163,6 +164,7 @@ const helpMegaMenu: MegaMenuSection[] = [
 const navigationItems: NavigationItem[] = [
   { label: "Cars", href: "/cars", megaMenu: carsMegaMenu, icon: <Car size={18} /> },
   { label: "Vans", href: "/vans", megaMenu: vansMegaMenu, icon: <Truck size={18} /> },
+  { label: "Salary Sacrifice", href: "/salary-sacrifice", icon: <BatteryCharging size={18} /> },
   { label: "Special Offers", href: "/special-offers", icon: <Zap size={18} /> },
   { label: "Quick Delivery", href: "/quick-delivery", icon: <Clock size={18} /> },
   { label: "What is Leasing?", megaMenu: leasingMegaMenu, icon: <Info size={18} /> },
